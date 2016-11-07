@@ -16,7 +16,7 @@ conn = psycopg2.connect(database=credentials.database,
                        )
 conn.autocommit = True
 
-def get_histogram_values(table_name, column_name, nbins=0, bin_width=0, cast_as=None, where_clause=''):
+def get_histogram_values(table_name, column_name, nbins=25, bin_width=None, cast_as=None, where_clause=''):
     """
     Takes a SQL table and creates histogram bin heights.
     Relevant parameters are either the number of bins
@@ -37,43 +37,62 @@ def get_histogram_values(table_name, column_name, nbins=0, bin_width=0, cast_as=
     where_clause - A SQL where clause specifying any
                    filters
     """
+    def _check_for_input_errors(nbins, bin_width):
+        """Check to see if any inputs conflict and raise an error if there are issues."""
+        if nbins is not None and nbins < 0:
+            raise Exception('nbins must be positive.')
+        if bin_width is not None and bin_width < 0:
+            raise Exception('bin_width must be positive.')
     
-    # Look for input errors
-    if nbins != 0 and bin_width != 0:
-        raise Exception('Both nbins and bin_width cannot be specified. Leave one at 0')
-    elif bin_width < 0:
-        raise Exception('bin_width must be positive.')
-    elif nbins < 0:
-        raise Exception('nbins must be positive.')
-    elif nbins == 0 and bin_width == 0:
-        # Default value if no options are specified
-        nbins=25
-        
-    sql = '''
-    SELECT column_name, data_type
-      FROM information_schema.columns
-     WHERE table_name = '{table_name}'
-       AND column_name = '{column_name}'
-    '''.format(table_name=table_name, column_name=column_name)
-    info_df = psql.read_sql(sql, conn)
+    def _get_column_information(table_name, column_name, conn):
+        """Get column name and data type information."""
+        sql = '''
+        SELECT column_name, data_type
+          FROM information_schema.columns
+         WHERE table_name = '{table_name}'
+           AND column_name = '{column_name}'
+        '''.format(table_name=table_name, column_name=column_name)
+        return psql.read_sql(sql, conn)
     
-    if column_name in info_df['column_name'].tolist():
-        if cast_as is None:
-            is_category = (info_df[info_df.column_name == column_name]['data_type'] == 'text')[0]
-        elif cast_as in ['timestamp', 'date', 'int', 'float', 'numeric']:  # If we want to cast it to a number
-            is_category = False
+    def _is_column_category(column_name, table_name, info_df):
+        """Returns whether the column is a category."""
+        if column_name in info_df['column_name'].tolist():
+            if cast_as is None:
+                return (info_df[info_df.column_name == column_name]['data_type'] == 'text')[0]
+            elif cast_as in ['timestamp', 'date', 'int', 'float', 'numeric']:  # If we want to cast it to a number
+                return False
+            else:
+                return True
         else:
-            is_category = True
-    else:
-        raise Exception(column_name + ' is not found in the table ' + table_name)
+            raise Exception(column_name + ' is not found in the table ' + table_name)
+
+    def _get_cast_string(cast_as):
+        """
+        If cast_as is specified, we must create a cast string
+        to recast our columns. If not, we set it as a blank string.
+        """
+        if cast_as is None:
+            return ''
+        else:
+            return '::' + cast_as.upper()
+
+    def _min_max_value(column_name):
+        sql = '''
+        SELECT MIN({col_name}{cast_as}), MAX({col_name}{cast_as})
+          FROM {table_name}
+         {where_clause};
+        '''.format(col_name = column_name,
+                   cast_as = cast_string,
+                   table_name = table_name,
+                   where_clause = where_clause
+                  )
+        return tuple(psql.read_sql(sql, conn).iloc[0])
     
-    # If cast_as is specified, we must create a cast string
-    # to recast our columns. If not, we set it as a blank string.
-    if cast_as is None:
-        cast_string = ''
-    else:
-        cast_string = '::' + cast_as.upper()
-    
+    _check_for_input_errors(nbins, bin_width)
+    info_df = _get_column_information(table_name, column_name, conn)
+    is_category = _is_column_category(column_name, table_name, info_df)
+    cast_string = _get_cast_string(cast_as)
+
     if is_category:
         sql = '''
         SELECT {column_name} AS category, COUNT(*) AS freq
@@ -83,27 +102,15 @@ def get_histogram_values(table_name, column_name, nbins=0, bin_width=0, cast_as=
         '''.format(column_name=column_name, table_name=table_name)
     
     else:
-        def _min_max_value(column_name):
-            sql = '''
-            SELECT MIN({col_name}{cast_as}), MAX({col_name}{cast_as})
-              FROM {table_name}
-             {where_clause};
-            '''.format(col_name = column_name,
-                       cast_as = cast_string,
-                       table_name = table_name,
-                       where_clause = where_clause
-                      )
-            return tuple(psql.read_sql(sql, conn).iloc[0])
-        
         # Get min and max value of the column
         min_val, max_val = _min_max_value(column_name)
         
         # Get the span of the column
         span_value = max_val - min_val
-        if bin_width == 0:
-            bin_width = span_value/nbins
-        if nbins == 0:
-            nbins = span_value * bin_width
+        if bin_width is not None:
+            # If bin width is specified, calculate nbins
+            # from it.
+            nbins = span_value/bin_width
         
         # Form the SQL statement. The min_val must be taken
         # down by a small value because of rounding errors. 
@@ -248,7 +255,7 @@ def _create_weight_percentage(hist_col, normed=False):
     else:
         return hist_col
 
-def plot_numeric_hists(df_list, labels=[], nbins=10, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
+def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
     """
     Plots numerical histograms together. 
     
@@ -288,7 +295,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=10, log=False, normed=False, nu
         """
         If there are nulls, determine the weights.
         Otherwise, set to 0. Return the list of 
-        null weights
+        null weights.
         """
         return [float(df[df['bin_nbr'].isnull()].weights)
                 if is_null else 0 
@@ -420,6 +427,20 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
                     (Default: sns deep color palette)
     """
 
+
+    def _listify(df_list, labels):
+        """
+        If df_list and labels are DataFrames and strings
+        respectively, make them into lists to conform 
+        with the rest of the code as it is built to 
+        handle multiple variables.
+        """
+        if str(type(df_list)) == "<class 'pandas.core.frame.DataFrame'>":
+            df_list = [df_list]
+        if type(labels) == "<type 'str'>":
+            labels = [labels]
+        return df_list, labels
+
     def _join_freq_df(df_list):
         """
         Joins all the DataFrames so that we have a master table 
@@ -549,14 +570,14 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
 
         return bin_height, null_height
 
-    def _get_bin_width():
+    def _get_bin_width(num_hists):
         """Returns each bin width based on number of histograms"""
-        if len(df_list) == 1:
+        if num_hists == 1:
             return 1
         else:
             return 0.8/num_hists
 
-    def _plot_all_histograms(bin_left, bin_height, bin_width):
+    def _plot_all_histograms(bin_left, bin_height, null_bin_left, null_bin_height, bin_width):
         for i in range(num_hists):
             # If there are any null bins, plot them
             if len(null_bin_height[i]) > 0:
@@ -582,7 +603,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
             xticks_loc = np.arange(num_categories) + 0.5
             plt.xticks(xticks_loc, hist_df.dropna()['category'].tolist(), rotation=90)
 
-    def _plot_new_yticks():
+    def _plot_new_yticks(bin_height):
         """Changes yticks to log scale."""
         max_y_tick = int(np.ceil(np.max(bin_height))) + 1
         yticks = [10**i for i in range(max_y_tick)]
@@ -590,15 +611,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
         plt.yticks(range(max_y_tick), yticks)
 
 
-    # If df_list is a DataFrame, convert it into a list
-    # If it is a list, keep it as is
-    if str(type(df_list)) == "<class 'pandas.core.frame.DataFrame'>":
-        df_list = [df_list]
-    # If labels is a string, convert it to a list
-    # If it is a list, keep it as is
-    if type(labels) == "<type 'str'>":
-        labels = [labels]
-
+    df_list, labels = _listify(df_list, labels)
     # Joins in all the df_list DataFrames
     # so that we can pick a certain category
     # and retrieve the count for each.
@@ -611,13 +624,14 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
 
     bin_left, null_bin_left = _get_bin_left(null_at, hist_df)
     bin_height, null_bin_height = _get_bin_height(null_at, order_by, hist_df)
-    bin_width = _get_bin_width()
+    bin_width = _get_bin_width(num_hists)
 
     # Plotting functions
-    _plot_all_histograms(bin_left, bin_height, bin_width)
+    _plot_all_histograms(bin_left, bin_height, null_bin_left, null_bin_height, bin_width)
     _plot_xticks(null_at, bin_left, hist_df)
+
     if log:
-        _plot_new_yticks()
+        _plot_new_yticks(bin_height)
 
 
         
