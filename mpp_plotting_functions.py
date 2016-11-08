@@ -9,14 +9,16 @@ import seaborn as sns
 
 import credentials
 
-conn = psycopg2.connect(database=credentials.database,
-                        user=credentials.user,
-                        password=credentials.password,
-                        host=credentials.host
-                       )
-conn.autocommit = True
+def _separate_schema_table(full_table_name, conn):
+    """Separates schema name and table name"""
+    if '.' in full_table_name:
+        return full_table_name.split('.')
+    else:
+        schema_name = psql.read_sql('SELECT current_schema();', conn).iloc[0, 0]
+        table_name = full_table_name
+        return schema_name, full_table_name
 
-def get_histogram_values(table_name, column_name, nbins=25, bin_width=None, cast_as=None, where_clause=''):
+def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None, cast_as=None, where_clause=''):
     """
     Takes a SQL table and creates histogram bin heights.
     Relevant parameters are either the number of bins
@@ -25,7 +27,10 @@ def get_histogram_values(table_name, column_name, nbins=25, bin_width=None, cast
     or it will throw an error.
     
     Inputs:
-    table_name - Name of the table in SQL
+    conn - A psycopg2 connection object
+    table_name - Name of the table in SQL. Input can also
+                 include have the schema name prepended, with 
+                 a '.', e.g. 'schema_name.table_name'
     column_name - Name of the column of interest
     nbins - Number of desired bins (Default: 0)
     bin_width - Width of each bin (Default: 0)
@@ -37,6 +42,8 @@ def get_histogram_values(table_name, column_name, nbins=25, bin_width=None, cast
     where_clause - A SQL where clause specifying any
                    filters
     """
+
+
     def _check_for_input_errors(nbins, bin_width):
         """Check to see if any inputs conflict and raise an error if there are issues."""
         if nbins is not None and nbins < 0:
@@ -44,14 +51,19 @@ def get_histogram_values(table_name, column_name, nbins=25, bin_width=None, cast
         if bin_width is not None and bin_width < 0:
             raise Exception('bin_width must be positive.')
     
-    def _get_column_information(table_name, column_name, conn):
+    def _get_column_information(full_table_name, column_name, conn):
         """Get column name and data type information."""
+        
+        schema_name, table_name =  _separate_schema_table(full_table_name, conn)
+
         sql = '''
         SELECT column_name, data_type
           FROM information_schema.columns
-         WHERE table_name = '{table_name}'
+         WHERE table_schema = '{schema_name}'
+           AND table_name = '{table_name}'
            AND column_name = '{column_name}'
-        '''.format(table_name=table_name, column_name=column_name)
+        '''.format(schema_name=schema_name, table_name=table_name, column_name=column_name)
+        
         return psql.read_sql(sql, conn)
     
     def _is_column_category(column_name, table_name, info_df):
@@ -143,7 +155,7 @@ def get_histogram_values(table_name, column_name, nbins=25, bin_width=None, cast
     
     return psql.read_sql(sql, conn)
 
-def get_scatterplot_values(table_name, column_name_x, column_name_y, nbins=(0, 0), bin_size=(0, 0), cast_x_as=None, cast_y_as=None):
+def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins=(1000, 1000), bin_size=None, cast_x_as=None, cast_y_as=None):
     """
     Takes a SQL table and creates scatter plot bin values.
     This is the 2D version of get_histogram_values.
@@ -154,7 +166,10 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, nbins=(0, 0
     or it will throw an error.
     
     Inputs:
-    table_name - Name of the table in SQL
+    conn - A psycopg2 connection object
+    table_name - Name of the table in SQL. Input can also
+                 include have the schema name prepended, with 
+                 a '.', e.g. 'schema_name.table_name'
     column_name - Name of the column of interest
     nbins - Number of desired bins for x and y directions (Default: (0, 0))
     bin_size - Size of each bin for x and y directions (Default: (0, 0))
@@ -166,40 +181,50 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, nbins=(0, 0
     cast_y_as - SQL type to cast y as
     """
     
-    # Look for input errors
-    if nbins != (0, 0) and bin_size != (0, 0):
-        raise Exception('Both nbins and bin_size cannot be specified. Leave one at (0, 0).')
-    elif bin_size[0] < 0 or bin_size[1] < 0:
-        raise Exception('Bin dimensions must both be positive.')
-    elif nbins[0] < 0 or nbins[1] < 0:
-        raise Exception('Number of bin dimensions must both be positive')
-    elif nbins == (0, 0) and bin_size == (0, 0):
-        # Default value if no options are specified
-        nbins = (1000, 1000)
+
+    def _check_for_input_errors(nbins, bin_size):
+        """Check to see if any inputs conflict and raise an error if there are issues."""
+        if bin_size is not None:
+            if bin_size[0] < 0 or bin_size[1] < 0:
+                raise Exception('Bin dimensions must both be positive.')
+        elif nbins is not None:
+            if nbins[0] < 0 or nbins[1] < 0:
+                raise Exception('Number of bin dimensions must both be positive')
     
-    # If cast_x_as or cast_y_as is specified, we must create cast
-    # strings to recast our columns. If not, we set them as 
-    # blank strings.
-    if cast_x_as is None:
-        cast_x_string = ''
-    else:
-        cast_x_string = '::' + cast_x_as.upper()
-        
-    if cast_y_as is None:
-        cast_y_string = ''
-    else:
-        cast_y_string = '::' + cast_y_as.upper()
-        
-    def _min_max_value(column_name, cast_as):
+    def _get_cast_string(cast_as_x, cast_as_y):
+        """
+        If cast_as_x and/or cast_as_y are specified, we must create a cast string
+        to recast our columns. If not, we set it as a blank string.
+        """
+        if cast_x_as is None:
+            cast_x_string = ''
+        else:
+            cast_x_string = '::' + cast_x_as.upper()
+            
+        if cast_y_as is None:
+            cast_y_string = ''
+        else:
+            cast_y_string = '::' + cast_y_as.upper()
+
+        return cast_x_string, cast_y_string
+
+    def _min_max_value(table_name, column_name, cast_as):
+        """Get the min and max value of a specified column."""
         sql = '''
         SELECT MIN({col_name}{cast_as}), MAX({col_name}{cast_as})
           FROM {table_name};
         '''.format(col_name=column_name, table_name=table_name, cast_as=cast_as)
+
         return tuple(psql.read_sql(sql, conn).iloc[0])
-    
+     
+
+    schema_name, table_name = _separate_schema_table(table_name, conn)
+    _check_for_input_errors(nbins, bin_size)
+    cast_x_string, cast_y_string = _get_cast_string(cast_x_as, cast_y_as)
+
     # Get the min and max values for x and y directions
-    min_val_x, max_val_x = _min_max_value(column_name_x, cast_as=cast_x_string)
-    min_val_y, max_val_y = _min_max_value(column_name_y, cast_as=cast_y_string)
+    min_val_x, max_val_x = _min_max_value(table_name, column_name_x, cast_as=cast_x_string)
+    min_val_y, max_val_y = _min_max_value(table_name, column_name_y, cast_as=cast_y_string)
     
     # Get the span of values in the x and y direction
     span_values = (max_val_x - min_val_x, max_val_y - min_val_y)
@@ -208,8 +233,8 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, nbins=(0, 0
     # if only bin_size is specified, we can 
     # back calculate the number of bins that will
     # be used.
-    if nbins == (0, 0):
-        nbins = [i/j for i, j in zip(span_values, bin_size)]
+    if bin_size is not None:
+        nbins = [float(i)/j for i, j in zip(span_values, bin_size)]
     
     sql = '''
       WITH binned_table
@@ -250,6 +275,8 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, nbins=(0, 0
 
 def _create_weight_percentage(hist_col, normed=False):
     """Convert frequencies to percent"""
+
+
     if normed:
         return hist_col/hist_col.sum()
     else:
@@ -278,6 +305,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
               are 'left' or 'right'. Leave it empty to not
               include (Default: left)
     """
+
     
     def _check_for_nulls(df_list):
         """Returns whether any of the DataFrames have a null column."""
@@ -291,7 +319,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
         for df in df_list:
             df['weights'] = _create_weight_percentage(df[['freq']], normed)
 
-    def _get_null_weights(df_list):
+    def _get_null_weights(has_null, df_list):
         """
         If there are nulls, determine the weights.
         Otherwise, set to 0. Return the list of 
@@ -316,14 +344,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
             _, bins, _ = plt.hist(x=bin_nbrs, weights=weights, bins=nbins, log=log)
         return bins
 
-    def _get_bin_width():
-        """Returns each bin width based on number of histograms"""
-        if len(df_list) == 1:
-            return 1
-        else:
-            return 0.8/num_hists
-
-    def _get_null_bin_width():
+    def _get_null_bin_width(bins, null_weights):
         """Returns the width of each null bin."""
         bin_width = bins[1] - bins[0]
         if num_hists == 1:
@@ -331,21 +352,24 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
         else:
             return 0.8 * bin_width/len(null_weights)
 
-    def _get_null_bin_left(loc):
+    def _get_null_bin_left(loc, num_hists, bins, null_weights):
         """Gets the left index/indices or the null column(s)."""
         bin_width = bins[1] - bins[0]
         if loc == 'left':
             if num_hists == 1:
                 return [bins[0] - bin_width]
             else:
-                return [bins[0] - bin_width + bin_width*0.1 + i*_get_null_bin_width() for i in range(num_hists)]
+                return [bins[0] - bin_width + bin_width*0.1 + i*_get_null_bin_width(bins, null_weights) for i in range(num_hists)]
         elif loc == 'right':
             if num_hists == 1:
                 return [bins[-1]]
             else:
                 return [bin_width*0.1 + i*_get_null_bin_width() + bins[-1] for i in range(num_hists)]
+        elif loc == 'order':
+            raise Exception('null_at = order is not supported for numeric histograms.')
+
    
-    def _plot_null_xticks(loc, xticks):
+    def _plot_null_xticks(loc, bins, xticks):
         """Given current xticks, plot appropriate NULL tick."""
         bin_width = bins[1] - bins[0]
         if loc == 'left':
@@ -371,7 +395,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
 
     # Set color_palette
     sns.set_palette(color_palette)
-    null_weights = _get_null_weights(df_list)
+    null_weights = _get_null_weights(has_null, df_list)
     
     df_list = [df.dropna() for df in df_list]
     weights = [df.weights for df in df_list]
@@ -380,15 +404,15 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
     # Plot histograms and retrieve bins
     bins = _plot_hist(bin_nbrs, weights, labels, nbins, log)
 
-    null_bin_width = _get_null_bin_width()
-    null_bin_left = _get_null_bin_left(null_at)
+    null_bin_width = _get_null_bin_width(bins, null_weights)
+    null_bin_left = _get_null_bin_left(null_at, num_hists, bins, null_weights)
     xticks, _ = plt.xticks()
 
     # If there are any NULLs, plot them and change xticks
-    if np.any(has_null):
+    if null_at != '' and np.any(has_null):
         for i in range(num_hists):
             plt.bar(null_bin_left[i], null_weights[i], null_bin_width, color=color_palette[i], hatch='x')
-        _plot_null_xticks(null_at, xticks)
+        _plot_null_xticks(null_at, bins, xticks)
 
 def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at='left', order_by=0, ascending=True, color_palette=sns.color_palette('deep')):
     """
@@ -501,13 +525,12 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
             Returns indices within a bin for each histogram. This is needed
             since there is no 
             """
-            if len(hist_df) == 1:
+            if len(df_list) == 1:
                 return [0, 1]
             else:
                 return np.linspace(0.1, 0.9, num_hists + 1)[:-1]
 
         within_bin_left = _get_within_bin_left(hist_df)
-
 
         # For each histogram, we generate a separate list of 
         # tick locations. We do this so that later, when we plot
@@ -632,6 +655,4 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
 
     if log:
         _plot_new_yticks(bin_height)
-
-
-        
+      
