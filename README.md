@@ -1,9 +1,20 @@
 # jupyter-notebook-template
 
-This repository includes a Jupyter notebook and credentials file that serve as a template for Pivotal engagements with our customers. 
+This repository includes Jupyter notebooks and Python files that serve as templates for engagements at Pivotal with our customers.
 
-The Notebook Template.ipynb notebook imports relevant libraries for machine learning and connecting to a cluster such as HAWQ GPDB. The accompanying credentials.py includes template code for login. This information is then read in by the notebook to connect to the DCA.
+## Files
+### Notebooks
+- MPP Plotting.ipynb: This file gives examples of how to plot on the order of millions and billions of data from HAWQ or GPDB. This uses functions from mpp_plotting_functions.py to summarize the data into manageable pieces. We then use matplotlib to plot these.
 
-The Plotting Examples.ipynb notebook includes some sample plots and sets up default parameters (e.g., size, line width, font size) to make the plots look nicer. It also includes a couple of multi-plot examples and using seaborn colours.
+- MPP ROC Curve.ipynb: This file shows how to plot an ROC curve from data in HAWQ or GPDB.
 
-The MPP Plotting.ipynb gives examples on how to plot when there is a lot of data in HAWQ. This requires summarizing the data into more manageable pieces.
+- Notebook Template.ipynb: This notebook is a template for any new notebook. It should be copied when creating a new notebook so that all of the libraries are already typed in along with any changes to the default matplotlib settings and magic commands to interact with SQL.
+
+- Plotting Examples.ipynb: This is a reference guide for various matplotlib plots. It also sets up seaborn colours.
+
+### Python FIles
+- crednetials.py: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
+
+- mpp_plotting_functions.py: This file includes all function definitions for the backend plotting functions.
+
+- sql_functions.py: This file defines utility functions for interacting with the cluster (e.g., getting the table or column names).

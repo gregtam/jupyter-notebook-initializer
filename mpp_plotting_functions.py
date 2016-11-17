@@ -1,3 +1,6 @@
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
 from IPython.display import display
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -18,6 +21,34 @@ def _separate_schema_table(full_table_name, conn):
         table_name = full_table_name
         return schema_name, full_table_name
 
+def _create_weight_percentage(hist_col, normed=False):
+    """Convert frequencies to percent"""
+    if normed:
+        return hist_col/hist_col.sum()
+    else:
+        return hist_col
+
+def _listify(df_list, labels):
+    """
+    If df_list and labels are DataFrames and strings
+    respectively, make them into lists to conform 
+    with the rest of the code as it is built to 
+    handle multiple variables.
+    """
+    if str(type(df_list)) == "<class 'pandas.core.frame.DataFrame'>":
+        df_list = [df_list]
+    if type(labels) == "<type 'str'>":
+        labels = [labels]
+    return df_list, labels
+
+def _add_weights_column(df_list, normed):
+    """
+    Add the weights column for each DataFrame in a 
+    list of DataFrames.
+    """
+    for df in df_list:
+        df['weights'] = _create_weight_percentage(df[['freq']], normed)
+
 def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None, cast_as=None, where_clause=''):
     """
     Takes a SQL table and creates histogram bin heights.
@@ -27,17 +58,13 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
     or it will throw an error.
     
     Inputs:
-    conn - A psycopg2 connection object
     table_name - Name of the table in SQL. Input can also
                  include have the schema name prepended, with 
-                 a '.', e.g. 'schema_name.table_name'
+                 a '.', e.g., 'schema_name.table_name'
     column_name - Name of the column of interest
-    nbins - Number of desired bins (Default: 0)
-    bin_width - Width of each bin (Default: 0)
-    
-    If nbins and bin_width are left at 0, then nbins will
-    be set to 25.
-    
+    conn - A psycopg2 connection object
+    nbins - Number of desired bins (Default: 25)
+    bin_width - Width of each bin (Default: None)
     cast_as - SQL type to cast as
     where_clause - A SQL where clause specifying any
                    filters
@@ -66,15 +93,23 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
         
         return psql.read_sql(sql, conn)
     
-    def _is_column_category(column_name, table_name, info_df):
+    def _is_column_category(table_name, column_name, info_df):
         """Returns whether the column is a category."""
         if column_name in info_df['column_name'].tolist():
             if cast_as is None:
+                # If it's text type, return True
                 return (info_df[info_df.column_name == column_name]['data_type'] == 'text')[0]
             elif cast_as in ['timestamp', 'date', 'int', 'float', 'numeric']:  # If we want to cast it to a number
                 return False
             else:
                 return True
+        else:
+            raise Exception(column_name + ' is not found in the table ' + table_name)
+
+    def _is_time_type(table_name, column_name, info_df):
+        """Returns whether the column is a time type (date or timestamp)."""
+        if column_name in info_df['column_name'].tolist():
+            return (info_df[info_df.column_name == column_name]['data_type'].isin(['date', 'timestamp']))[0]
         else:
             raise Exception(column_name + ' is not found in the table ' + table_name)
 
@@ -102,7 +137,8 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
     
     _check_for_input_errors(nbins, bin_width)
     info_df = _get_column_information(table_name, column_name, conn)
-    is_category = _is_column_category(column_name, table_name, info_df)
+    is_time_type = _is_time_type(table_name, column_name, info_df)
+    is_category = _is_column_category(table_name, column_name, info_df)
     cast_string = _get_cast_string(cast_as)
 
     if is_category:
@@ -112,7 +148,38 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
          GROUP BY {column_name}
          ORDER BY COUNT(*) DESC;
         '''.format(column_name=column_name, table_name=table_name)
-    
+    elif is_time_type:
+        # Get min and max value of the column
+        min_val, max_val = _min_max_value(column_name)
+        
+        # Get the span of the column
+        span_value = max_val - min_val
+        if bin_width is not None:
+            # If bin width is specified, calculate nbins
+            # from it.
+            nbins = span_value/bin_width
+
+        sql = '''
+          WITH binned_table
+            AS (SELECT FLOOR(EXTRACT(EPOCH FROM {column_name} - {min_val}::TIMESTAMP)
+                             /EXTRACT(EPOCH FROM {max_val}::TIMESTAMP - {min_val}::TIMESTAMP)
+                             * {nbins}
+                            )
+                       /{nbins} * EXTRACT(EPOCH FROM {max_val}::TIMESTAMP - {min_val}::TIMESTAMP) * INTERVAL '1 SECOND'
+                       + {min_val}::TIMESTAMP AS bin_nbr
+                  FROM {table_name}
+               )
+        SELECT bin_nbr, COUNT(*) AS freq
+          FROM binned_table
+         GROUP BY bin_nbr
+         ORDER BY bin_nbr;
+        '''.format(column_name = column_name,
+                   nbins = nbins,
+                   min_val = "'" + str(min_val) + "'",
+                   max_val = "'" + str(max_val) + "'",
+                   table_name = table_name,
+                   where_clause = where_clause
+                  )
     else:
         # Get min and max value of the column
         min_val, max_val = _min_max_value(column_name)
@@ -166,10 +233,10 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     or it will throw an error.
     
     Inputs:
-    conn - A psycopg2 connection object
     table_name - Name of the table in SQL. Input can also
                  include have the schema name prepended, with 
                  a '.', e.g. 'schema_name.table_name'
+    conn - A psycopg2 connection object
     column_name - Name of the column of interest
     nbins - Number of desired bins for x and y directions (Default: (0, 0))
     bin_size - Size of each bin for x and y directions (Default: (0, 0))
@@ -273,28 +340,71 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     
     return psql.read_sql(sql, conn)
 
-def _create_weight_percentage(hist_col, normed=False):
-    """Convert frequencies to percent"""
+def get_roc_values(table_name, y_true, y_score, conn):
+    """
+    Computes the ROC curve in database.
+
+    Inputs:
+    table_name - The name of the table that includes predicted 
+                 and true values
+    y_true - The name of the column that contains the true values
+    y_score - The name of the column that contains the scores
+              of the machine learning algorithm
+    conn - A psycopg2 connection object
+    """
 
 
-    if normed:
-        return hist_col/hist_col.sum()
-    else:
-        return hist_col
+    sql = '''
+      WITH pre_roc AS
+           (SELECT *,
+                   SUM({y_true})
+                       OVER (ORDER BY {y_score} DESC) AS num_pos,
+                   SUM(1 - {y_true})
+                       OVER (ORDER BY {y_score} DESC) AS num_neg,
+                   SUM({y_true})
+                       OVER (ROWS BETWEEN UNBOUNDED PRECEDING
+                                      AND UNBOUNDED FOLLOWING
+                            ) AS tot_pos,
+                   SUM(1 - {y_true})
+                       OVER (ROWS BETWEEN UNBOUNDED PRECEDING
+                                      AND UNBOUNDED FOLLOWING
+                            ) AS tot_neg,
+                   row_number()
+                       OVER (ORDER BY {y_score}) AS row_num,
+                   row_number()
+                       OVER (ORDER BY {y_score} DESC) AS row_num_desc,
+                   AVG({y_true})
+                       OVER (ORDER BY {y_score}
+                              ROWS BETWEEN 1 PRECEDING
+                                       AND CURRENT ROW
+                            ) AS last_value
+              FROM {table_name}
+           )
+    SELECT {y_score} AS thresholds,
+           num_pos/tot_pos::NUMERIC AS tpr,
+           num_neg/tot_neg::NUMERIC AS fpr
+      FROM pre_roc
+     WHERE row_num = 1
+        OR row_num_desc = 1
+        OR last_value = 0.5
+     ORDER BY {y_score};
+    '''.format(table_name=table_name, y_true=y_true, y_score=y_score)
 
-def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
+    return psql.read_sql(sql, conn)
+
+def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
     """
     Plots numerical histograms together. 
     
     Inputs:
     df_list - A pandas DataFrame or a list of DataFrames
-                which have two columns (bin_nbr and freq).
-                The bin_nbr is the value of the histogram bin
-                and the frequency is how many values fall in
-                that bin.
+              which have two columns (bin_nbr and freq).
+              The bin_nbr is the value of the histogram bin
+              and the frequency is how many values fall in
+              that bin.
     labels - A string (for one histogram) or list of strings
              which sets the labels for the histograms
-    nbins - The desired number of bins
+    nbins - The desired number of bins (Default: 25)
     log - Boolean of whether to display y axis on log scale
           (Default: False)
     normed - Boolean of whether to normalize histograms so
@@ -304,67 +414,87 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
     null_at - Which side to set a null value column. Options
               are 'left' or 'right'. Leave it empty to not
               include (Default: left)
+    color_palette - Seaborn colour palette, i.e., a list of tuples
+                    representing the colours. 
+                    (Default: sns deep color palette)
     """
 
     
     def _check_for_nulls(df_list):
-        """Returns whether any of the DataFrames have a null column."""
+        """Returns a list of whether each list has a null column."""
         return [df['bin_nbr'].isnull().any() for df in df_list]
-
-    def _add_weights_column(df_list, normed):
-        """
-        Add the weights column for each DataFrame in a 
-        list of DataFrames.
-        """
-        for df in df_list:
-            df['weights'] = _create_weight_percentage(df[['freq']], normed)
 
     def _get_null_weights(has_null, df_list):
         """
         If there are nulls, determine the weights.
-        Otherwise, set to 0. Return the list of 
-        null weights.
+        Otherwise, set weights to 0. Return the list 
+        of null weights.
         """
         return [float(df[df['bin_nbr'].isnull()].weights)
                 if is_null else 0 
                 for is_null, df in zip(has_null, df_list)]
 
-    def _plot_hist(bin_nbrs, weights, labels, bins, log):
+    def _get_data_type(bin_nbrs):
+        """
+        Returns the data type in the histogram, i.e.,
+        whether it is numeric or a timetamp. This is
+        important because it determines how we deal with
+        the bins.
+        """
+        if 'float' in str(type(bin_nbrs[0][0])) or 'int' in str(type(bin_nbrs[0][0])):
+            return 'numeric'
+        elif str(type(bin_nbrs[0][0])) == "<class 'pandas.tslib.Timestamp'>":
+            return 'timestamp'
+        else:
+            raise Exception('Bin data type not valid: {}'.format(type(bin_nbrs[0][0])))
+
+    def _plot_hist(data_type, bin_nbrs, weights, labels, bins, log):
         """
         Plots the histogram for non-null values with corresponding
         labels if provided. This function will take also reduce the
         number of bins in the histogram. This is useful if we want to
         apply get_histogram_values for a large number of bins, then 
-        experiment with plotting different bing amounts using the histogram
+        experiment with plotting different bin amounts using the histogram
         values.
         """
-        if len(labels) > 0:
-            _, bins, _ = plt.hist(x=bin_nbrs, weights=weights, label=labels, bins=nbins, log=log)
-        else:
-            _, bins, _ = plt.hist(x=bin_nbrs, weights=weights, bins=nbins, log=log)
-        return bins
+        # If the bin type is numeric
+        if data_type == 'numeric':
+            if len(labels) > 0:
+                _, bins, _ = plt.hist(x=bin_nbrs, weights=weights, label=labels, bins=nbins, log=log)
+            else:
+                _, bins, _ = plt.hist(x=bin_nbrs, weights=weights, bins=nbins, log=log)
+            return bins
 
-    def _get_null_bin_width(bins, null_weights):
+        # If the bin type is datetime or a timestamp
+        elif data_type == 'timestamp':
+            # Since pandas dataframes will convert timestamps and date
+            # types to pandas.tslib.Timestamp types, we will need
+            # to convert them to datetime since these can be plotted.
+            datetime_list = [dt.to_pydatetime() for dt in bin_nbrs[0]]
+            _, bins, _ = plt.hist(x=datetime_list, weights=weights[0], bins=nbins, log=log)
+            return bins
+
+    def _get_null_bin_width(data_type, bin_info, num_hists, null_weights):
         """Returns the width of each null bin."""
-        bin_width = bins[1] - bins[0]
+        bin_width = bin_info[1] - bin_info[0]
         if num_hists == 1:
             return bin_width
         else:
             return 0.8 * bin_width/len(null_weights)
 
-    def _get_null_bin_left(loc, num_hists, bins, null_weights):
+    def _get_null_bin_left(data_type, loc, num_hists, bin_info, null_weights):
         """Gets the left index/indices or the null column(s)."""
-        bin_width = bins[1] - bins[0]
+        bin_width = bin_info[1] - bin_info[0]
         if loc == 'left':
             if num_hists == 1:
-                return [bins[0] - bin_width]
+                return [bin_info[0] - bin_width]
             else:
-                return [bins[0] - bin_width + bin_width*0.1 + i*_get_null_bin_width(bins, null_weights) for i in range(num_hists)]
+                return [bin_info[0] - bin_width + bin_width*0.1 + i*_get_null_bin_width(data_type, bin_info, num_hists, null_weights) for i in range(num_hists)]
         elif loc == 'right':
             if num_hists == 1:
-                return [bins[-1]]
+                return [bin_info[-1]]
             else:
-                return [bin_width*0.1 + i*_get_null_bin_width() + bins[-1] for i in range(num_hists)]
+                return [bin_width*0.1 + i*_get_null_bin_width(data_type, bin_info, num_hists, null_weights) + bin_info[-1] for i in range(num_hists)]
         elif loc == 'order':
             raise Exception('null_at = order is not supported for numeric histograms.')
 
@@ -377,15 +507,26 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
         elif loc == 'right':
             plt.xticks(xticks[:-1].tolist() + [bins[-1] + bin_width*0.5], [int(i) for i in xticks[:-1]] + ['NULL'])
 
-    # If df_list is a DataFrame, convert it into a list
-    # If it is a list, keep it as is
-    if str(type(df_list)) == "<class 'pandas.core.frame.DataFrame'>":
-        df_list = [df_list]
-    # If labels is a string, convert it to a list
-    # If it is a list, keep it as is
-    if type(labels) == "<type 'str'>":
-        labels = [labels]
+    def _get_xlim(loc, has_null, bins, null_bin_left, null_bin_height):
+        """Gets the x-limits for plotting."""
+        if loc == '' or not np.any(has_null):
+            # If we do not want to plot nulls, or if there are no nulls
+            # in the data, then set the limits as the regular histogram
+            # limits
+            xlim_left = bins[0]
+            xlim_right = bins[-1]
+        else:
+            xlim_left = min(bins.tolist() + null_bin_left)
+            if loc == 'left':
+                xlim_right = max(bins.tolist() + null_bin_left)
+            elif loc == 'right':
+                xlim_right = max(bins.tolist() + null_bin_left) + null_bin_height
 
+        return xlim_left, xlim_right
+
+
+    df_list, labels = _listify(df_list, labels)
+    # Joins in all the df_list DataFrames
     # Number of histograms we want to overlay
     num_hists = len(df_list)
 
@@ -401,22 +542,29 @@ def plot_numeric_hists(df_list, labels=[], nbins=None, log=False, normed=False, 
     weights = [df.weights for df in df_list]
     bin_nbrs = [df.bin_nbr for df in df_list]
     
-    # Plot histograms and retrieve bins
-    bins = _plot_hist(bin_nbrs, weights, labels, nbins, log)
+    data_type = _get_data_type(bin_nbrs)
 
-    null_bin_width = _get_null_bin_width(bins, null_weights)
-    null_bin_left = _get_null_bin_left(null_at, num_hists, bins, null_weights)
+    # Plot histograms and retrieve bins
+    bin_info = _plot_hist(data_type, bin_nbrs, weights, labels, nbins, log)
+
+    null_bin_width = _get_null_bin_width(data_type, bin_info, num_hists, null_weights)
+    null_bin_left = _get_null_bin_left(data_type, null_at, num_hists, bin_info, null_weights)
     xticks, _ = plt.xticks()
 
-    # If there are any NULLs, plot them and change xticks
+    # If we are plotting NULLS and there are some, plot them and change xticks
     if null_at != '' and np.any(has_null):
         for i in range(num_hists):
             plt.bar(null_bin_left[i], null_weights[i], null_bin_width, color=color_palette[i], hatch='x')
-        _plot_null_xticks(null_at, bins, xticks)
+        if data_type == 'numeric':
+            _plot_null_xticks(null_at, bin_info, xticks)
+        elif data_type == 'timestamp':
+            pass 
+    # Set the x axis limits
+    plt.xlim(_get_xlim(null_at, has_null, bin_info, null_bin_left, null_bin_width))
 
 def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at='left', order_by=0, ascending=True, color_palette=sns.color_palette('deep')):
     """
-    Plots categorical histograms
+    Plots categorical histograms.
     
     Inputs:
     df_list - A pandas DataFrame or a list of DataFrames
@@ -450,20 +598,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
                     representing the colours. 
                     (Default: sns deep color palette)
     """
-
-
-    def _listify(df_list, labels):
-        """
-        If df_list and labels are DataFrames and strings
-        respectively, make them into lists to conform 
-        with the rest of the code as it is built to 
-        handle multiple variables.
-        """
-        if str(type(df_list)) == "<class 'pandas.core.frame.DataFrame'>":
-            df_list = [df_list]
-        if type(labels) == "<type 'str'>":
-            labels = [labels]
-        return df_list, labels
+    
 
     def _join_freq_df(df_list):
         """
@@ -655,4 +790,47 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
 
     if log:
         _plot_new_yticks(bin_height)
-      
+
+def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
+    """
+    Plots histograms by date.
+
+    Inputs:
+    df_list - A pandas DataFrame or a list of DataFrames
+              which have two columns (bin_nbr and freq).
+              The bin_nbr is the value of the histogram bin
+              and the frequency is how many values fall in
+              that bin.
+    labels - A string (for one histogram) or list of strings
+             which sets the labels for the histograms
+    nbins - The desired number of bins (Default: 25)
+    log - Boolean of whether to display y axis on log scale
+          (Default: False)
+    normed - Boolean of whether to normalize histograms so
+             that the heights of each bin sum up to 1. This
+             is useful for plotting columns with difference
+             sizes (Default: False)
+    null_at - Which side to set a null value column. Options
+              are 'left' or 'right'. Leave it empty to not
+              include (Default: left)
+    color_palette - Seaborn colour palette, i.e., a list of tuples
+                    representing the colours. 
+                    (Default: sns deep color palette)
+    """
+
+
+    df_list, labels = _listify(df_list, labels)
+    # Joins in all the df_list DataFrames
+    # Number of histograms we want to overlay
+    num_hists = len(df_list)
+
+    # If any of the columns are null
+    has_null = _check_for_nulls(df_list)
+    _add_weights_column(df_list, normed)
+
+    # Set color_palette
+    sns.set_palette(color_palette)
+    null_weights = _get_null_weights(has_null, df_list)
+
+    print has_null
+    print null_weights

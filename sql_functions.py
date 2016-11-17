@@ -65,7 +65,7 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
         reverse_key = ''
 
     sql = '''
-    SELECT table_name, column_name
+    SELECT table_name, column_name, data_type
       FROM information_schema.columns
      WHERE table_schema = '{schema_name}'
        AND table_name = '{table_name}'
@@ -81,4 +81,44 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
 
     return psql.read_sql(sql, conn)
 
+def get_percent_missing(full_table_name, conn):
+    """
+    This function takes a schema name and table name as an input
+    and creates a SQL query to determine the number of missing 
+    entries for each column. It will also determine the total
+    number of rows in the table.
 
+    Returns:
+    A pandas DataFrame with a column of the column column names
+    in the desired table and a column of the percentage of missing
+    values.
+    """
+
+
+    column_names = get_column_names(full_table_name, conn).column_name
+    schema_name, table_name = _separate_schema_table(full_table_name, conn)
+
+    num_missing_sql_list = ['SUM(({name} IS NULL)::integer) AS {name}'.format(name=name) for name in column_names]
+
+    get_missing_count_sql = '''
+    SELECT {0},
+           COUNT(*) AS total_count
+      FROM {schema_name}.{table_name};
+    '''.format(',\n           '.join(num_missing_sql_list),
+               schema_name=schema_name,
+               table_name=table_name
+              )
+
+    # Read in the data from the query and transpose it
+    pct_df = psql.read_sql(get_missing_count_sql, conn).T
+    # Rename the column to 'pct_null'
+    pct_df.columns = ['pct_null']
+    # Get the number of rows of table_name
+    total_count = pct_df.ix['total_count', 'pct_null']
+    # Remove the total_count from the DataFrame
+    pct_df = pct_df[:-1]/total_count
+    pct_df.reset_index(inplace=True)
+    pct_df.columns = ['column_name', 'pct_null']
+    pct_df['table_name'] = table_name
+
+    return pct_df
