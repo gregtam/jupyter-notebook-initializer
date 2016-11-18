@@ -4,8 +4,6 @@ import pandas as pd
 import pandas.io.sql as psql
 import psycopg2
 
-import credentials
-
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name"""
     if '.' in full_table_name:
@@ -15,31 +13,6 @@ def _separate_schema_table(full_table_name, conn):
         table_name = full_table_name
         return schema_name, full_table_name
 
-def get_table_names(conn, schema_name=None, view_query=False):
-    """
-    Gets all the table names in the specified database
-
-    Inputs:
-    conn - A psycopg2 connection object
-    schema_name -  Specify the schema of interest. If left blank,
-                   then it will return all tables in the database.
-    """
-
-    if schema_name is None:
-        where_clause = ''
-    else:
-        where_clause = "WHERE table_schema = '{}'".format(schema_name)
-
-    sql = '''
-    SELECT table_name
-      FROM information_schema.tables
-     {}
-    '''.format(where_clause)
-
-    if view_query:
-        print sql
-
-    return psql.read_sql(sql, conn)
 
 def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse=False, view_query=False):
     """
@@ -75,6 +48,44 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
                ordering = order_by,
                reverse = reverse_key
               )
+
+    if view_query:
+        print sql
+
+    return psql.read_sql(sql, conn)
+
+def get_function_code(function_name, conn):
+    """
+    Returns a SQL function's source code
+    """
+    sql = '''
+    SELECT pg_get_functiondef(oid)
+      FROM pg_proc
+     WHERE proname = '{function_name}'
+    '''.format(function_name=function_name)
+
+    return psql.read_sql(sql, conn).iloc[0, 0]
+
+def get_table_names(conn, schema_name=None, view_query=False):
+    """
+    Gets all the table names in the specified database
+
+    Inputs:
+    conn - A psycopg2 connection object
+    schema_name -  Specify the schema of interest. If left blank,
+                   then it will return all tables in the database.
+    """
+
+    if schema_name is None:
+        where_clause = ''
+    else:
+        where_clause = "WHERE table_schema = '{}'".format(schema_name)
+
+    sql = '''
+    SELECT table_name
+      FROM information_schema.tables
+     {}
+    '''.format(where_clause)
 
     if view_query:
         print sql
