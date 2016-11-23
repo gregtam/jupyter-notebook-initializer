@@ -1,5 +1,6 @@
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from textwrap import dedent
 
 from IPython.display import display
 import matplotlib as mpl
@@ -17,6 +18,7 @@ def _add_weights_column(df_list, normed):
     Add the weights column for each DataFrame in a 
     list of DataFrames.
     """
+
     for df in df_list:
         df['weights'] = _create_weight_percentage(df[['freq']], normed)
 
@@ -34,6 +36,7 @@ def _listify(df_list, labels):
     with the rest of the code as it is built to 
     handle multiple variables.
     """
+
     if str(type(df_list)) == "<class 'pandas.core.frame.DataFrame'>":
         df_list = [df_list]
     if type(labels) == "<type 'str'>":
@@ -50,7 +53,7 @@ def _separate_schema_table(full_table_name, conn):
         return schema_name, full_table_name
 
 
-def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None, cast_as=None, where_clause=''):
+def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None, cast_as=None, where_clause='', print_query=False):
     """
     Takes a SQL table and creates histogram bin heights.
     Relevant parameters are either the number of bins
@@ -69,8 +72,8 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
     cast_as - SQL type to cast as
     where_clause - A SQL where clause specifying any
                    filters
+    print_query - If True, print the resulting query.
     """
-
 
     def _check_for_input_errors(nbins, bin_width):
         """Check to see if any inputs conflict and raise an error if there are issues."""
@@ -100,7 +103,7 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
             if cast_as is None:
                 # If it's text type, return True
                 return (info_df[info_df.column_name == column_name]['data_type'] == 'text')[0]
-            elif cast_as in ['timestamp', 'date', 'int', 'float', 'numeric']:  # If we want to cast it to a number
+            elif cast_as.upper() in ['TIMESTAMP', 'DATE', 'INT', 'FLOAT', 'NUMERIC']:  # If we want to cast it to a number
                 return False
             else:
                 return True
@@ -124,7 +127,7 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
         else:
             return '::' + cast_as.upper()
 
-    def _min_max_value(column_name):
+    def _min_max_value(column_name, conn):
         sql = '''
         SELECT MIN({col_name}{cast_as}), MAX({col_name}{cast_as})
           FROM {table_name}
@@ -151,7 +154,7 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
         '''.format(column_name=column_name, table_name=table_name)
     elif is_time_type:
         # Get min and max value of the column
-        min_val, max_val = _min_max_value(column_name)
+        min_val, max_val = _min_max_value(column_name, conn)
         
         # Get the span of the column
         span_value = max_val - min_val
@@ -161,14 +164,21 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
             nbins = span_value/bin_width
 
         sql = '''
-          WITH binned_table
-            AS (SELECT FLOOR(EXTRACT(EPOCH FROM {column_name} - {min_val}::TIMESTAMP)
-                             /EXTRACT(EPOCH FROM {max_val}::TIMESTAMP - {min_val}::TIMESTAMP)
+          WITH min_max_table AS
+               (SELECT MIN({column_name}) AS min_val,
+                       MAX({column_name}) AS max_val
+                  FROM {table_name}
+                 {where_clause}
+               ),
+               binned_table AS
+               (SELECT FLOOR(EXTRACT(EPOCH FROM {column_name}::TIMESTAMP - min_val::TIMESTAMP)
+                             /EXTRACT(EPOCH FROM max_val::TIMESTAMP - min_val::TIMESTAMP)
                              * {nbins}
                             )
-                       /{nbins} * EXTRACT(EPOCH FROM {max_val}::TIMESTAMP - {min_val}::TIMESTAMP) * INTERVAL '1 SECOND'
-                       + {min_val}::TIMESTAMP AS bin_nbr
+                       /{nbins} * EXTRACT(EPOCH FROM max_val::TIMESTAMP - min_val::TIMESTAMP) * INTERVAL '1 SECOND'
+                       + min_val::TIMESTAMP AS bin_nbr
                   FROM {table_name}
+                       CROSS JOIN min_max_table
                )
         SELECT bin_nbr, COUNT(*) AS freq
           FROM binned_table
@@ -176,14 +186,13 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
          ORDER BY bin_nbr;
         '''.format(column_name = column_name,
                    nbins = nbins,
-                   min_val = "'" + str(min_val) + "'",
-                   max_val = "'" + str(max_val) + "'",
                    table_name = table_name,
                    where_clause = where_clause
                   )
+
     else:
         # Get min and max value of the column
-        min_val, max_val = _min_max_value(column_name)
+        min_val, max_val = _min_max_value(column_name, conn)
         
         # Get the span of the column
         span_value = max_val - min_val
@@ -192,20 +201,33 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
             # from it.
             nbins = span_value/bin_width
         
-        # Form the SQL statement. The min_val must be taken
-        # down by a small value because of rounding errors. 
-        # If this is not taken into account, a column value
-        # may be smaller than the min_value. We also must
-        # deal with cases where the column name equals the max
+        # Form the SQL statement. We must be careful if the
+        # value is the maximum value within the column because
+        # it might end up in a bucket on its own since this is
+        # the only case where the floor function is exactly equal
+        #  to 1.
         sql = '''
-          WITH binned_table
-            AS (SELECT FLOOR(({column_name}{cast_as} - {min_val})
-                             /({max_val} - {min_val}) 
-                             * {nbins}
-                            )
-                       /{nbins} * ({max_val} - {min_val}) 
-                       + {min_val} AS bin_nbr
+          WITH min_max_table AS
+               (SELECT MIN({column_name}{cast_as}) AS min_val,
+                       MAX({column_name}{cast_as}) AS max_val
                   FROM {table_name}
+                 {where_clause}
+               ),
+               binned_table AS
+               (SELECT CASE WHEN {column_name}{cast_as} < max_val
+                                 THEN FLOOR(({column_name}{cast_as} - min_val)::NUMERIC
+                                            /(max_val - min_val)
+                                            * {nbins}
+                                           )
+                                      /{nbins} * (max_val - min_val) 
+                                      + min_val
+                            WHEN {column_name}{cast_as} = max_val
+                                 THEN ({nbins} - 1)::NUMERIC/{nbins} * (max_val - min_val) 
+                                      + min_val
+                            ELSE NULL
+                             END AS bin_nbr
+                  FROM {table_name}
+                       CROSS JOIN min_max_table
                  {where_clause}
                )
         SELECT bin_nbr, COUNT(*) AS freq
@@ -215,15 +237,16 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
         '''.format(column_name = column_name,
                    cast_as = cast_string,
                    nbins = nbins,
-                   min_val = min_val - 1e-8,
-                   max_val = max_val + 1e-8,
                    table_name = table_name,
                    where_clause = where_clause
                   )
-    
+
+    if print_query:
+        print dedent(sql)
+
     return psql.read_sql(sql, conn)
 
-def get_roc_values(table_name, y_true, y_score, conn):
+def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
     """
     Computes the ROC curve in database.
 
@@ -234,8 +257,8 @@ def get_roc_values(table_name, y_true, y_score, conn):
     y_score - The name of the column that contains the scores
               of the machine learning algorithm
     conn - A psycopg2 connection object
+    print_query - If True, print the resulting query.
     """
-
 
     sql = '''
       WITH pre_roc AS
@@ -273,9 +296,12 @@ def get_roc_values(table_name, y_true, y_score, conn):
      ORDER BY {y_score};
     '''.format(table_name=table_name, y_true=y_true, y_score=y_score)
 
+    if print_query:
+        print dedent(sql)
+
     return psql.read_sql(sql, conn)
 
-def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins=(1000, 1000), bin_size=None, cast_x_as=None, cast_y_as=None):
+def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins=(1000, 1000), bin_size=None, cast_x_as=None, cast_y_as=None, print_query=False):
     """
     Takes a SQL table and creates scatter plot bin values.
     This is the 2D version of get_histogram_values.
@@ -293,14 +319,10 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     column_name - Name of the column of interest
     nbins - Number of desired bins for x and y directions (Default: (0, 0))
     bin_size - Size of each bin for x and y directions (Default: (0, 0))
-    
-    If nbins and bin_size are both left at (0, 0), then nbins will be
-    set to (1000, 1000)
-    
     cast_x_as - SQL type to cast x as
     cast_y_as - SQL type to cast y as
+    print_query - If True, print the resulting query.
     """
-    
 
     def _check_for_input_errors(nbins, bin_size):
         """Check to see if any inputs conflict and raise an error if there are issues."""
@@ -355,29 +377,73 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     # be used.
     if bin_size is not None:
         nbins = [float(i)/j for i, j in zip(span_values, bin_size)]
-    
+
     sql = '''
-      WITH binned_table
-        AS (SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
-                         /({max_val_x} - {min_val_x}) 
-                         * {nbins_x}
-                         )
-                   /{nbins_x} * ({max_val_x} - {min_val_x}) 
-                   + {min_val_x} AS bin_nbr_x,
+    DROP TABLE IF EXISTS binned_table_temp;
+    CREATE TABLE binned_table_temp
+       AS SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
+                             /({max_val_x} - {min_val_x}) 
+                             * {nbins_x}
+                        )
+                       /{nbins_x} * ({max_val_x} - {min_val_x}) 
+                       + {min_val_x} AS bin_nbr_x,
                    FLOOR(({y_col}{cast_y_as} - {min_val_y})
-                         /({max_val_y} - {min_val_y}) 
-                         * {nbins_y}
-                         )
-                   /{nbins_y} * ({max_val_y} - {min_val_y}) 
-                   + {min_val_y} AS bin_nbr_y
+                             /({max_val_y} - {min_val_y}) 
+                             * {nbins_y}
+                        )
+                       /{nbins_y} * ({max_val_y} - {min_val_y}) 
+                       + {min_val_y} AS bin_nbr_y
+              FROM {table_name}
+             WHERE {x_col} IS NOT NULL
+               AND {y_col} IS NOT NULL;
+
+    DROP TABLE IF EXISTS scatter_bins_temp;
+    CREATE TABLE scatter_bins_temp
+       AS SELECT *
+              FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
+                               + {min_val_x} AS scat_bin_x
+                     FROM generate_series(1, {nbins_x}) AS x
+                   ) AS foo_x
+                   CROSS JOIN (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
+                                          + {min_val_y} AS scat_bin_y
+                                 FROM generate_series(1, {nbins_y}) AS y 
+                              ) AS foo_y;
+
+      WITH binned_table AS
+           (SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
+                             /({max_val_x} - {min_val_x}) 
+                             * {nbins_x}
+                        )
+                       /{nbins_x} * ({max_val_x} - {min_val_x}) 
+                       + {min_val_x} AS bin_nbr_x,
+                   FLOOR(({y_col}{cast_y_as} - {min_val_y})
+                             /({max_val_y} - {min_val_y}) 
+                             * {nbins_y}
+                        )
+                       /{nbins_y} * ({max_val_y} - {min_val_y}) 
+                       + {min_val_y} AS bin_nbr_y
               FROM {table_name}
              WHERE {x_col} IS NOT NULL
                AND {y_col} IS NOT NULL
+           ),
+           scatter_bins AS
+           (SELECT *
+              FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
+                               + {min_val_x} AS scat_bin_x
+                     FROM generate_series(0, {nbins_x}) AS x
+                   ) AS foo_x
+                   CROSS JOIN (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
+                                          + {min_val_y} AS scat_bin_y
+                                 FROM generate_series(0, {nbins_y}) AS y 
+                              ) AS foo_y
            )
-    SELECT bin_nbr_x, bin_nbr_y, COUNT(*) AS freq
+    SELECT scat_bin_x, scat_bin_y, COUNT(bin_nbr_x) AS freq
       FROM binned_table
-     GROUP BY bin_nbr_x, bin_nbr_y
-     ORDER BY bin_nbr_x, bin_nbr_y;
+           RIGHT JOIN scatter_bins
+                   ON ROUND(bin_nbr_x::NUMERIC, 6) = ROUND(scat_bin_x::NUMERIC, 6)
+                  AND ROUND(bin_nbr_y::NUMERIC, 6) = ROUND(scat_bin_y::NUMERIC, 6)
+     GROUP BY scat_bin_x, scat_bin_y
+     ORDER BY scat_bin_x, scat_bin_y;
     '''.format(x_col = column_name_x,
                cast_x_as = cast_x_string,
                y_col = column_name_y,
@@ -391,6 +457,9 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
                table_name = table_name
               )
     
+    if print_query:
+        print dedent(sql)
+
     return psql.read_sql(sql, conn)
 
 def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at='left', order_by=0, ascending=True, color_palette=sns.color_palette('deep')):
@@ -428,8 +497,8 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
     color_palette - Seaborn colour palette, i.e., a list of tuples
                     representing the colours. 
                     (Default: sns deep color palette)
+    print_query - If True, print the resulting query.
     """
-    
 
     def _join_freq_df(df_list):
         """
@@ -647,8 +716,8 @@ def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False, nu
     color_palette - Seaborn colour palette, i.e., a list of tuples
                     representing the colours. 
                     (Default: sns deep color palette)
+    print_query - If True, print the resulting query.
     """
-
     
     def _check_for_nulls(df_list):
         """Returns a list of whether each list has a null column."""
@@ -728,7 +797,6 @@ def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False, nu
         elif loc == 'order':
             raise Exception('null_at = order is not supported for numeric histograms.')
 
-   
     def _plot_null_xticks(loc, bins, xticks):
         """Given current xticks, plot appropriate NULL tick."""
         bin_width = bins[1] - bins[0]
@@ -817,8 +885,8 @@ def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_
     color_palette - Seaborn colour palette, i.e., a list of tuples
                     representing the colours. 
                     (Default: sns deep color palette)
+    print_query - If True, print the resulting query.
     """
-
 
     df_list, labels = _listify(df_list, labels)
     # Joins in all the df_list DataFrames
@@ -835,3 +903,45 @@ def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_
 
     print has_null
     print null_weights
+
+def plot_scatterplot(scatter_df, s=20, c=sns.color_palette('deep')[0], plot_type='scatter', by_size=True, by_opacity=True, marker='o'):
+    """
+    Plots a scatter plot based on the computed scatter plot bins.
+
+    Inputs:
+    scatter_df - 
+    """
+
+    if plot_type == 'scatter':
+        if not by_size and not by_opacity:
+            raise Exception('Scatterplot must be plotted by size and/or opacity.')
+
+        if by_size:
+            plot_size = 20*scatter_df.freq
+        else:
+            plot_size = 20
+
+        if by_opacity:
+            colour = np.zeros((scatter_df.shape[0], 4))
+            colour[:, :3] = c
+            # Add alpha component
+            colour[:, 3] = scatter_df.freq/scatter_df.freq.max()
+            lw = 0 
+        else:
+            colour = c
+            lw = 0.5
+
+        plt.scatter(scatter_df.scat_bin_x, scatter_df.scat_bin_y, c=colour, s=plot_size, lw=lw, marker=marker)
+
+    elif plot_type == 'heatmap':
+        num_x = len(scatter_df.scat_bin_x.value_counts())
+        num_y = len(scatter_df.scat_bin_y.value_counts())
+
+        x = scatter_df['scat_bin_x'].values.reshape(num_x, num_y)
+        y = scatter_df['scat_bin_y'].values.reshape(num_x, num_y)
+        z = scatter_df['freq'].values.reshape(num_x, num_y) 
+
+        plt.pcolor(x, y, z)
+        plt.xlim(x.min(), x.max())
+        plt.ylim(y.min(), y.max())
+

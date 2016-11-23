@@ -13,7 +13,7 @@ This repository includes Jupyter notebooks and Python files that serve as templa
 - Plotting Examples.ipynb: This is a reference guide for various matplotlib plots. It also sets up seaborn colours.
 
 ### Python FIles
-- crednetials.py: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
+- credentials.py: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
 
 - mpp_plotting_functions.py: This file includes all function definitions for the backend plotting functions.
 

@@ -14,7 +14,7 @@ def _separate_schema_table(full_table_name, conn):
         return schema_name, full_table_name
 
 
-def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse=False, view_query=False):
+def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse=False, print_query=False):
     """
     Gets all of the column names of a specific table.
 
@@ -27,7 +27,7 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
                ordinal_position, alphabetically. 
                (Default: ordinal_position)
     reverse - If True, then reverse the ordering (Default: False).
-    view_query - If True, print the resulting query.
+    print_query - If True, print the resulting query.
     """
 
     schema_name, table_name = _separate_schema_table(full_table_name, conn)
@@ -49,12 +49,12 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
                reverse = reverse_key
               )
 
-    if view_query:
+    if print_query:
         print sql
 
     return psql.read_sql(sql, conn)
 
-def get_function_code(function_name, conn):
+def get_function_code(function_name, conn, print_query=False):
     """
     Returns a SQL function's source code
     """
@@ -64,9 +64,12 @@ def get_function_code(function_name, conn):
      WHERE proname = '{function_name}'
     '''.format(function_name=function_name)
 
+    if print_query:
+        print sql
+
     return psql.read_sql(sql, conn).iloc[0, 0]
 
-def get_table_names(conn, schema_name=None, view_query=False):
+def get_table_names(conn, schema_name=None, print_query=False):
     """
     Gets all the table names in the specified database
 
@@ -74,6 +77,7 @@ def get_table_names(conn, schema_name=None, view_query=False):
     conn - A psycopg2 connection object
     schema_name -  Specify the schema of interest. If left blank,
                    then it will return all tables in the database.
+    print_query - If True, print the resulting query.
     """
 
     if schema_name is None:
@@ -87,12 +91,12 @@ def get_table_names(conn, schema_name=None, view_query=False):
      {}
     '''.format(where_clause)
 
-    if view_query:
+    if print_query:
         print sql
 
     return psql.read_sql(sql, conn)
 
-def get_percent_missing(full_table_name, conn):
+def get_percent_missing(full_table_name, conn, print_query=False):
     """
     This function takes a schema name and table name as an input
     and creates a SQL query to determine the number of missing 
@@ -111,7 +115,7 @@ def get_percent_missing(full_table_name, conn):
 
     num_missing_sql_list = ['SUM(({name} IS NULL)::integer) AS {name}'.format(name=name) for name in column_names]
 
-    get_missing_count_sql = '''
+    sql = '''
     SELECT {0},
            COUNT(*) AS total_count
       FROM {schema_name}.{table_name};
@@ -121,7 +125,7 @@ def get_percent_missing(full_table_name, conn):
               )
 
     # Read in the data from the query and transpose it
-    pct_df = psql.read_sql(get_missing_count_sql, conn).T
+    pct_df = psql.read_sql(sql, conn).T
     # Rename the column to 'pct_null'
     pct_df.columns = ['pct_null']
     # Get the number of rows of table_name
@@ -131,5 +135,8 @@ def get_percent_missing(full_table_name, conn):
     pct_df.reset_index(inplace=True)
     pct_df.columns = ['column_name', 'pct_null']
     pct_df['table_name'] = table_name
+
+    if print_query:
+        print sql
 
     return pct_df
