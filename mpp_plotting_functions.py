@@ -22,12 +22,14 @@ def _add_weights_column(df_list, normed):
     for df in df_list:
         df['weights'] = _create_weight_percentage(df[['freq']], normed)
 
+
 def _create_weight_percentage(hist_col, normed=False):
     """Convert frequencies to percent"""
     if normed:
         return hist_col/hist_col.sum()
     else:
         return hist_col
+
 
 def _listify(df_list, labels):
     """
@@ -43,6 +45,7 @@ def _listify(df_list, labels):
         labels = [labels]
     return df_list, labels
 
+
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name"""
     if '.' in full_table_name:
@@ -51,6 +54,7 @@ def _separate_schema_table(full_table_name, conn):
         schema_name = psql.read_sql('SELECT current_schema();', conn).iloc[0, 0]
         table_name = full_table_name
         return schema_name, full_table_name
+
 
 
 def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None, cast_as=None, where_clause='', print_query=False):
@@ -63,7 +67,7 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
     
     Inputs:
     table_name - Name of the table in SQL. Input can also
-                 include have the schema name prepended, with 
+                 include have the schema name prepended, with
                  a '.', e.g., 'schema_name.table_name'
     column_name - Name of the column of interest
     conn - A psycopg2 connection object
@@ -246,6 +250,7 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
 
     return psql.read_sql(sql, conn)
 
+
 def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
     """
     Computes the ROC curve in database.
@@ -301,6 +306,7 @@ def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
 
     return psql.read_sql(sql, conn)
 
+
 def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins=(1000, 1000), bin_size=None, cast_x_as=None, cast_y_as=None, print_query=False):
     """
     Takes a SQL table and creates scatter plot bin values.
@@ -315,6 +321,8 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     table_name - Name of the table in SQL. Input can also
                  include have the schema name prepended, with 
                  a '.', e.g. 'schema_name.table_name'
+    column_name_x - Name of one column of interest to be plotted
+    column_name_y - Name of another column of interest to be plotted
     conn - A psycopg2 connection object
     column_name - Name of the column of interest
     nbins - Number of desired bins for x and y directions (Default: (0, 0))
@@ -462,6 +470,7 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
 
     return psql.read_sql(sql, conn)
 
+
 def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at='left', order_by=0, ascending=True, color_palette=sns.color_palette('deep')):
     """
     Plots categorical histograms.
@@ -497,7 +506,6 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
     color_palette - Seaborn colour palette, i.e., a list of tuples
                     representing the colours. 
                     (Default: sns deep color palette)
-    print_query - If True, print the resulting query.
     """
 
     def _join_freq_df(df_list):
@@ -691,6 +699,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False, null_at=
     if log:
         _plot_new_yticks(bin_height)
 
+
 def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
     """
     Plots numerical histograms together. 
@@ -716,7 +725,6 @@ def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False, nu
     color_palette - Seaborn colour palette, i.e., a list of tuples
                     representing the colours. 
                     (Default: sns deep color palette)
-    print_query - If True, print the resulting query.
     """
     
     def _check_for_nulls(df_list):
@@ -860,6 +868,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False, nu
     # Set the x axis limits
     plt.xlim(_get_xlim(null_at, has_null, bin_info, null_bin_left, null_bin_width))
 
+
 def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_at='left', color_palette=sns.color_palette('deep')):
     """
     Plots histograms by date.
@@ -868,7 +877,7 @@ def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_
     df_list - A pandas DataFrame or a list of DataFrames
               which have two columns (bin_nbr and freq).
               The bin_nbr is the value of the histogram bin
-              and the frequency is how many values fall in
+              and freq is how many values fall in
               that bin.
     labels - A string (for one histogram) or list of strings
              which sets the labels for the histograms
@@ -885,7 +894,6 @@ def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_
     color_palette - Seaborn colour palette, i.e., a list of tuples
                     representing the colours. 
                     (Default: sns deep color palette)
-    print_query - If True, print the resulting query.
     """
 
     df_list, labels = _listify(df_list, labels)
@@ -904,12 +912,30 @@ def plot_date_hists(df_list, labels=[], nbins=25, log=False, normed=False, null_
     print has_null
     print null_weights
 
+
 def plot_scatterplot(scatter_df, s=20, c=sns.color_palette('deep')[0], plot_type='scatter', by_size=True, by_opacity=True, marker='o'):
     """
     Plots a scatter plot based on the computed scatter plot bins.
 
     Inputs:
-    scatter_df - 
+    scatter_df - a pandas DataFrame which has three columns
+                 (scat_bin_x, scat_bin_y, and freq), where the
+                 scat_bin_x and scat_bin_y are the bins along
+                 the x and y axes and freq is how many values 
+                 fall in that bin.
+    s - The size of each point (Default: 20)
+    c - The colour of the plot (Default: seaborn deep blue)
+    plot_type - The plot type. Can be either 'scatter' or
+                'heatmap'. (Default: scatter)
+ 	by_size - If True, then the size of each plotted point will
+ 	          be proportional to the frequency. Otherwise, 
+ 	          it will be a constant size specified by s
+ 	          (Default: True)
+ 	by_opacity - If True, then the opacity of each plotted
+ 	             point will be proportional to the frequency.
+ 	             Darker implies more data in that bin. 
+ 	             (Default: True)
+ 	marker - matplotlib marker to plot (Default: 'o')
     """
 
     if plot_type == 'scatter':
@@ -944,4 +970,3 @@ def plot_scatterplot(scatter_df, s=20, c=sns.color_palette('deep')[0], plot_type
         plt.pcolor(x, y, z)
         plt.xlim(x.min(), x.max())
         plt.ylim(y.min(), y.max())
-
