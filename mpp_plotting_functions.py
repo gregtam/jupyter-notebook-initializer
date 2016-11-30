@@ -273,12 +273,14 @@ def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
                    SUM(1 - {y_true})
                        OVER (ORDER BY {y_score} DESC) AS num_neg,
                    SUM({y_true})
-                       OVER (ROWS BETWEEN UNBOUNDED PRECEDING
-                                      AND UNBOUNDED FOLLOWING
+                       OVER (ORDER BY y_score
+                              ROWS BETWEEN UNBOUNDED PRECEDING
+                                       AND UNBOUNDED FOLLOWING
                             ) AS tot_pos,
                    SUM(1 - {y_true})
-                       OVER (ROWS BETWEEN UNBOUNDED PRECEDING
-                                      AND UNBOUNDED FOLLOWING
+                       OVER (ORDER BY y_score
+                              ROWS BETWEEN UNBOUNDED PRECEDING
+                                       AND UNBOUNDED FOLLOWING
                             ) AS tot_neg,
                    row_number()
                        OVER (ORDER BY {y_score}) AS row_num,
@@ -927,15 +929,15 @@ def plot_scatterplot(scatter_df, s=20, c=sns.color_palette('deep')[0], plot_type
     c - The colour of the plot (Default: seaborn deep blue)
     plot_type - The plot type. Can be either 'scatter' or
                 'heatmap'. (Default: scatter)
- 	by_size - If True, then the size of each plotted point will
- 	          be proportional to the frequency. Otherwise, 
- 	          it will be a constant size specified by s
- 	          (Default: True)
- 	by_opacity - If True, then the opacity of each plotted
- 	             point will be proportional to the frequency.
- 	             Darker implies more data in that bin. 
- 	             (Default: True)
- 	marker - matplotlib marker to plot (Default: 'o')
+    by_size - If True, then the size of each plotted point will
+              be proportional to the frequency. Otherwise, 
+              it will be a constant size specified by s
+              (Default: True)
+    by_opacity - If True, then the opacity of each plotted
+                 point will be proportional to the frequency.
+                 Darker implies more data in that bin. 
+                 (Default: True)
+    marker - matplotlib marker to plot (Default: 'o')
     """
 
     if plot_type == 'scatter':

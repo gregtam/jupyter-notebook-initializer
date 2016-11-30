@@ -14,7 +14,34 @@ def _separate_schema_table(full_table_name, conn):
         return schema_name, full_table_name
 
 
-def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse=False, print_query=False):
+
+def clear_schema(schema_name, conn, print_query=False):
+    """
+    Remove all tables in a given schema.
+
+    Inputs:
+    schema_name - Name of the schema in SQL
+    conn - A psycopg2 connection object
+    print_query - If True, print the resulting query.
+    """
+
+    sql = '''
+    SELECT table_name
+      FROM information_schema.tables
+     WHERE table_schema = '{}'
+    '''.format(schema_name)
+
+    if print_query:
+        print sql
+
+    table_names = psql.read_sql(sql, conn).table_name
+
+    for name in table_names:
+        del_sql = 'DROP TABLE IF EXISTS {schema_name}.{table_name};'.format(schema_name=schema_name, table_name=name)
+        psql.execute(del_sql, conn)
+
+
+def get_column_names(table_name, conn, order_by='ordinal_position', reverse=False, print_query=False):
     """
     Gets all of the column names of a specific table.
 
@@ -54,10 +81,9 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
 
     return psql.read_sql(sql, conn)
 
+
 def get_function_code(function_name, conn, print_query=False):
-    """
-    Returns a SQL function's source code
-    """
+    """Returns a SQL function's source code"""
     sql = '''
     SELECT pg_get_functiondef(oid)
       FROM pg_proc
@@ -68,6 +94,7 @@ def get_function_code(function_name, conn, print_query=False):
         print sql
 
     return psql.read_sql(sql, conn).iloc[0, 0]
+
 
 def get_table_names(conn, schema_name=None, print_query=False):
     """
@@ -96,19 +123,21 @@ def get_table_names(conn, schema_name=None, print_query=False):
 
     return psql.read_sql(sql, conn)
 
-def get_percent_missing(full_table_name, conn, print_query=False):
+
+def get_percent_missing(table_name, conn, print_query=False):
     """
     This function takes a schema name and table name as an input
     and creates a SQL query to determine the number of missing 
     entries for each column. It will also determine the total
     number of rows in the table.
 
-    Returns:
-    A pandas DataFrame with a column of the column column names
-    in the desired table and a column of the percentage of missing
-    values.
+    Inputs:
+    table_name - Name of the table in SQL. Input can also
+                 include have the schema name prepended, with 
+                 a '.', e.g. 'schema_name.table_name'.
+    conn - A psycopg2 connection object
+    print_query - If True, print the resulting query.
     """
-
 
     column_names = get_column_names(full_table_name, conn).column_name
     schema_name, table_name = _separate_schema_table(full_table_name, conn)
@@ -140,3 +169,5 @@ def get_percent_missing(full_table_name, conn, print_query=False):
         print sql
 
     return pct_df
+
+
