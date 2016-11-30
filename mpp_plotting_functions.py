@@ -273,12 +273,12 @@ def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
                    SUM(1 - {y_true})
                        OVER (ORDER BY {y_score} DESC) AS num_neg,
                    SUM({y_true})
-                       OVER (ORDER BY y_score
+                       OVER (ORDER BY {y_score}
                               ROWS BETWEEN UNBOUNDED PRECEDING
                                        AND UNBOUNDED FOLLOWING
                             ) AS tot_pos,
                    SUM(1 - {y_true})
-                       OVER (ORDER BY y_score
+                       OVER (ORDER BY {y_score}
                               ROWS BETWEEN UNBOUNDED PRECEDING
                                        AND UNBOUNDED FOLLOWING
                             ) AS tot_neg,
