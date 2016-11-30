@@ -251,6 +251,31 @@ def get_histogram_values(table_name, column_name, conn, nbins=25, bin_width=None
     return psql.read_sql(sql, conn)
 
 
+def get_roc_auc_score(roc_df, tpr_column='tpr', fpr_column='fpr'):
+    """
+    Given an ROC DataFrame such as the one created
+    in get_roc_values, return the AUC. This is achieved
+    by taking the ROC curve and interpolating every
+    single point with a straight line and computing the
+    sum of the areas of all the trapezoids.
+
+    Inputs:
+    roc_df - A DataFrame with columns for true positive
+             rate and false positive rate
+    tpr_column - Name of the true positive rate column
+                 (Default: 'tpr')
+    fpr_column - Name of the false positive rate column
+                 (Default: 'fpr')
+    """
+
+    # The average of the two consecutive tprs
+    avg_height = roc_df[tpr_column].rolling(2).mean()[1:]
+    # The width (i.e., distance between two consecutive fprs)
+    width = roc_df.fpr.diff()[1:]
+
+    return sum(avg_height * width)
+
+
 def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
     """
     Computes the ROC curve in database.
@@ -300,7 +325,7 @@ def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
      WHERE row_num = 1
         OR row_num_desc = 1
         OR last_value = 0.5
-     ORDER BY {y_score};
+     ORDER BY {y_score} DESC;
     '''.format(table_name=table_name, y_true=y_true, y_score=y_score)
 
     if print_query:
