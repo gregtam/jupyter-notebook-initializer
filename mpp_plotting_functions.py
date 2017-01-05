@@ -417,46 +417,46 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     DROP TABLE IF EXISTS binned_table_temp;
     CREATE TABLE binned_table_temp
        AS SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
-                             /({max_val_x} - {min_val_x}) 
-                             * {nbins_x}
-                        )
+                            /({max_val_x} - {min_val_x}) 
+                            * {nbins_x}
+                       )
                        /{nbins_x} * ({max_val_x} - {min_val_x}) 
                        + {min_val_x} AS bin_nbr_x,
-                   FLOOR(({y_col}{cast_y_as} - {min_val_y})
-                             /({max_val_y} - {min_val_y}) 
-                             * {nbins_y}
-                        )
+                 FLOOR(({y_col}{cast_y_as} - {min_val_y})
+                            /({max_val_y} - {min_val_y}) 
+                            * {nbins_y}
+                       )
                        /{nbins_y} * ({max_val_y} - {min_val_y}) 
                        + {min_val_y} AS bin_nbr_y
-              FROM {table_name}
-             WHERE {x_col} IS NOT NULL
-               AND {y_col} IS NOT NULL;
+            FROM {table_name}
+           WHERE {x_col} IS NOT NULL
+             AND {y_col} IS NOT NULL;
 
     DROP TABLE IF EXISTS scatter_bins_temp;
     CREATE TABLE scatter_bins_temp
        AS SELECT *
-              FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
-                               + {min_val_x} AS scat_bin_x
-                     FROM generate_series(1, {nbins_x}) AS x
-                   ) AS foo_x
-                   CROSS JOIN (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
-                                          + {min_val_y} AS scat_bin_y
-                                 FROM generate_series(1, {nbins_y}) AS y 
-                              ) AS foo_y;
+            FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
+                              + {min_val_x} AS scat_bin_x
+                    FROM generate_series(1, {nbins_x}) AS x
+                 ) AS foo_x,
+                 (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
+                              + {min_val_y} AS scat_bin_y
+                    FROM generate_series(1, {nbins_y}) AS y 
+                 ) AS foo_y;
 
       WITH binned_table AS
            (SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
-                             /({max_val_x} - {min_val_x}) 
-                             * {nbins_x}
+                         /({max_val_x} - {min_val_x}) 
+                         * {nbins_x}
                         )
-                       /{nbins_x} * ({max_val_x} - {min_val_x}) 
-                       + {min_val_x} AS bin_nbr_x,
+                        /{nbins_x} * ({max_val_x} - {min_val_x}) 
+                        + {min_val_x} AS bin_nbr_x,
                    FLOOR(({y_col}{cast_y_as} - {min_val_y})
-                             /({max_val_y} - {min_val_y}) 
-                             * {nbins_y}
+                         /({max_val_y} - {min_val_y}) 
+                         * {nbins_y}
                         )
-                       /{nbins_y} * ({max_val_y} - {min_val_y}) 
-                       + {min_val_y} AS bin_nbr_y
+                        /{nbins_y} * ({max_val_y} - {min_val_y}) 
+                        + {min_val_y} AS bin_nbr_y
               FROM {table_name}
              WHERE {x_col} IS NOT NULL
                AND {y_col} IS NOT NULL
@@ -464,7 +464,7 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
            scatter_bins AS
            (SELECT *
               FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
-                               + {min_val_x} AS scat_bin_x
+                                + {min_val_x} AS scat_bin_x
                      FROM generate_series(0, {nbins_x}) AS x
                    ) AS foo_x
                    CROSS JOIN (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})

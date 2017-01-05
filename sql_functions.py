@@ -41,15 +41,15 @@ def clear_schema(schema_name, conn, print_query=False):
         psql.execute(del_sql, conn)
 
 
-def get_column_names(table_name, conn, order_by='ordinal_position', reverse=False, print_query=False):
+def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse=False, print_query=False):
     """
     Gets all of the column names of a specific table.
 
     Inputs:
     conn - A psycopg2 connection object
-    table_name - Name of the table in SQL. Input can also
-                 include have the schema name prepended, with 
-                 a '.', e.g. 'schema_name.table_name'.
+    full_table_name - Name of the table in SQL. Input can also
+                      include have the schema name prepended, with 
+                      a '.', e.g. 'schema_name.table_name'.
     order_by - Specified way to order columns. Can be one of
                ordinal_position, alphabetically. 
                (Default: ordinal_position)
@@ -124,7 +124,7 @@ def get_table_names(conn, schema_name=None, print_query=False):
     return psql.read_sql(sql, conn)
 
 
-def get_percent_missing(table_name, conn, print_query=False):
+def get_percent_missing(full_table_name, conn, print_query=False):
     """
     This function takes a schema name and table name as an input
     and creates a SQL query to determine the number of missing 
@@ -132,9 +132,9 @@ def get_percent_missing(table_name, conn, print_query=False):
     number of rows in the table.
 
     Inputs:
-    table_name - Name of the table in SQL. Input can also
-                 include have the schema name prepended, with 
-                 a '.', e.g. 'schema_name.table_name'.
+    full_table_name - Name of the table in SQL. Input can also
+                      include have the schema name prepended, with 
+                      a '.', e.g. 'schema_name.table_name'.
     conn - A psycopg2 connection object
     print_query - If True, print the resulting query.
     """
