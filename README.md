@@ -21,7 +21,7 @@ The goal of this repository is to serve as a template for any new projects to av
 
 ## Examples
 ### Executing SQL Queries
-We can execute SQL commands simply by typing regular SQL code and putting an <code>%%execsql</code> at the very top of the cell.
+We can execute SQL commands simply by typing regular SQL code and putting an `%%execsql` at the very top of the cell.
 ```
 %%execsql
 DROP TABLE IF EXISTS example_data_table;
@@ -31,7 +31,7 @@ CREATE TABLE example_data_table
 ```
 
 ### Reading SQL Query Outputs
-We can also read SQL query outputs and store them into a pandas DataFrame by putting <code>%%readsql</code> at the top of the cell. This will output the DataFrame below the cell. It also stores it into a variable called <code>_df</code> by default.
+We can also read SQL query outputs and store them into a pandas DataFrame by putting `%%readsql` at the top of the cell. This will output the DataFrame below the cell. It also stores it into a variable called `_df` by default.
 
 ```
 %%readsql
@@ -39,7 +39,7 @@ SELECT *
   FROM example_data_table;
 ```
 
-If the outputted DataFrame has too many rows, we can also look at the head by typing <code>%%readsql -h #</code> where <code>#</code> is an integer value. This will show the first <code>#</code> rows in the DataFrame, but store the entire DataFrame into <code>_df</code>.
+If the outputted DataFrame has too many rows, we can also look at the head by typing `%%readsql -h #` where `#` is an integer value. This will show the first `#` rows in the DataFrame, but store the entire DataFrame into `_df`.
 
 ```
 %%readsql -h 10
@@ -66,14 +66,19 @@ We can then select use this variable in our SQL query string.
 ```
 %%readsql -h 10 other_df
 SELECT *
-  FROM {table_name};
+FROM {table_name};
 ```
 
 ### Printing SQL Queries
-While writing our SQL queries with string formatting, we may want to view the query beforehand as it there may be errors. We want to this via the <code>%%printsql</code> magic function.
+While writing our SQL queries with string formatting, we may want to view the query beforehand as it there may be errors. We want to this via the `%%printsql` magic function.
 
 ```
 %%printsql
 SELECT *
   FROM {table_name}
 ```
+
+### Autofill Table Names
+When tables are created, the `refresh_tables` function is run. This will place the table name in the namespace as a string. This will give us tab completion for our table names.
+
+<img src='autofill.png' width='400'>
