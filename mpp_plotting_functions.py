@@ -271,7 +271,7 @@ def get_roc_auc_score(roc_df, tpr_column='tpr', fpr_column='fpr'):
     # The average of the two consecutive tprs
     avg_height = roc_df[tpr_column].rolling(2).mean()[1:]
     # The width (i.e., distance between two consecutive fprs)
-    width = roc_df.fpr.diff()[1:]
+    width = roc_df[fpr_column].diff()[1:]
 
     return sum(avg_height * width)
 
@@ -291,41 +291,32 @@ def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
     """
 
     sql = '''
-      WITH pre_roc AS
+      WITH row_num_table AS
+           (SELECT row_number()
+                       OVER (ORDER BY {y_score}) AS row_num,
+                   *
+              FROM {table_name}
+           ),
+           pre_roc AS 
            (SELECT *,
                    SUM({y_true})
                        OVER (ORDER BY {y_score} DESC) AS num_pos,
                    SUM(1 - {y_true})
-                       OVER (ORDER BY {y_score} DESC) AS num_neg,
-                   SUM({y_true})
-                       OVER (ORDER BY {y_score}
-                              ROWS BETWEEN UNBOUNDED PRECEDING
-                                       AND UNBOUNDED FOLLOWING
-                            ) AS tot_pos,
-                   SUM(1 - {y_true})
-                       OVER (ORDER BY {y_score}
-                              ROWS BETWEEN UNBOUNDED PRECEDING
-                                       AND UNBOUNDED FOLLOWING
-                            ) AS tot_neg,
-                   row_number()
-                       OVER (ORDER BY {y_score}) AS row_num,
-                   row_number()
-                       OVER (ORDER BY {y_score} DESC) AS row_num_desc,
-                   AVG({y_true})
-                       OVER (ORDER BY {y_score}
-                              ROWS BETWEEN 1 PRECEDING
-                                       AND CURRENT ROW
-                            ) AS last_value
+                       OVER (ORDER BY {y_score} DESC) AS num_neg
+              FROM row_num_table
+           ),
+           class_sizes AS
+           (SELECT SUM({y_true}) AS tot_pos,
+                   SUM(1 - {y_true}) AS tot_neg
               FROM {table_name}
            )
-    SELECT {y_score} AS thresholds,
+    SELECT DISTINCT
+           {y_score} AS thresholds,
            num_pos/tot_pos::NUMERIC AS tpr,
            num_neg/tot_neg::NUMERIC AS fpr
       FROM pre_roc
-     WHERE row_num = 1
-        OR row_num_desc = 1
-        OR last_value = 0.5
-     ORDER BY {y_score} DESC;
+           CROSS JOIN class_sizes
+     ORDER BY tpr, fpr;
     '''.format(table_name=table_name, y_true=y_true, y_score=y_score)
 
     if print_query:
@@ -417,46 +408,46 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
     DROP TABLE IF EXISTS binned_table_temp;
     CREATE TABLE binned_table_temp
        AS SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
-                            /({max_val_x} - {min_val_x}) 
-                            * {nbins_x}
-                       )
+                             /({max_val_x} - {min_val_x}) 
+                             * {nbins_x}
+                        )
                        /{nbins_x} * ({max_val_x} - {min_val_x}) 
                        + {min_val_x} AS bin_nbr_x,
-                 FLOOR(({y_col}{cast_y_as} - {min_val_y})
-                            /({max_val_y} - {min_val_y}) 
-                            * {nbins_y}
-                       )
+                   FLOOR(({y_col}{cast_y_as} - {min_val_y})
+                             /({max_val_y} - {min_val_y}) 
+                             * {nbins_y}
+                        )
                        /{nbins_y} * ({max_val_y} - {min_val_y}) 
                        + {min_val_y} AS bin_nbr_y
-            FROM {table_name}
-           WHERE {x_col} IS NOT NULL
-             AND {y_col} IS NOT NULL;
+              FROM {table_name}
+             WHERE {x_col} IS NOT NULL
+               AND {y_col} IS NOT NULL;
 
     DROP TABLE IF EXISTS scatter_bins_temp;
     CREATE TABLE scatter_bins_temp
        AS SELECT *
-            FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
-                              + {min_val_x} AS scat_bin_x
-                    FROM generate_series(1, {nbins_x}) AS x
-                 ) AS foo_x,
-                 (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
-                              + {min_val_y} AS scat_bin_y
-                    FROM generate_series(1, {nbins_y}) AS y 
-                 ) AS foo_y;
+              FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
+                               + {min_val_x} AS scat_bin_x
+                     FROM generate_series(1, {nbins_x}) AS x
+                   ) AS foo_x
+                   CROSS JOIN (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
+                                          + {min_val_y} AS scat_bin_y
+                                 FROM generate_series(1, {nbins_y}) AS y 
+                              ) AS foo_y;
 
       WITH binned_table AS
            (SELECT FLOOR(({x_col}{cast_x_as} - {min_val_x})
-                         /({max_val_x} - {min_val_x}) 
-                         * {nbins_x}
+                             /({max_val_x} - {min_val_x}) 
+                             * {nbins_x}
                         )
-                        /{nbins_x} * ({max_val_x} - {min_val_x}) 
-                        + {min_val_x} AS bin_nbr_x,
+                       /{nbins_x} * ({max_val_x} - {min_val_x}) 
+                       + {min_val_x} AS bin_nbr_x,
                    FLOOR(({y_col}{cast_y_as} - {min_val_y})
-                         /({max_val_y} - {min_val_y}) 
-                         * {nbins_y}
+                             /({max_val_y} - {min_val_y}) 
+                             * {nbins_y}
                         )
-                        /{nbins_y} * ({max_val_y} - {min_val_y}) 
-                        + {min_val_y} AS bin_nbr_y
+                       /{nbins_y} * ({max_val_y} - {min_val_y}) 
+                       + {min_val_y} AS bin_nbr_y
               FROM {table_name}
              WHERE {x_col} IS NOT NULL
                AND {y_col} IS NOT NULL
@@ -464,7 +455,7 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn, nbins
            scatter_bins AS
            (SELECT *
               FROM (SELECT x::NUMERIC/{nbins_x} * ({max_val_x} - {min_val_x})
-                                + {min_val_x} AS scat_bin_x
+                               + {min_val_x} AS scat_bin_x
                      FROM generate_series(0, {nbins_x}) AS x
                    ) AS foo_x
                    CROSS JOIN (SELECT y::NUMERIC/{nbins_y} * ({max_val_y} - {min_val_y})
