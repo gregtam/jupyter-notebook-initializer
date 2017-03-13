@@ -1,6 +1,6 @@
 # jupyter-notebook-template
 
-The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The 'Notebook Template.ipynb' serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
+The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The file Notebook Template.ipynb serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
 
 ## Files
 ### Notebooks
@@ -25,7 +25,7 @@ CREATE TABLE example_data_table
 ```
 
 ### Reading SQL Query Outputs
-We can also read SQL query outputs and store them into a pandas DataFrame by putting `%%readsql` at the top of the cell. This will output the DataFrame below the cell. It also stores it into a variable called `_df` by default.
+We can also read SQL query outputs and store them into a pandas DataFrame by putting `%%readsql` at the top of the cell. This will output the DataFrame below the cell. It also stores it into a pandas DataFrame called `_df` by default.
 
 ```
 %%readsql
@@ -38,10 +38,10 @@ If the outputted DataFrame has too many rows, we can also look at the head by ty
 ```
 %%readsql -h 10
 SELECT *
-  FROM example_data_table
+  FROM example_data_table;
 ```
 
-Additionally, if we wanted to store this table to a different variable, we can include this at the end of the top line of the cell.
+Additionally, if we wanted to store this table to a different DataFrame, we can include this at the end of the top line of the cell.
 
 ```
 %%readsql -h 10 other_df
@@ -60,16 +60,16 @@ We can then select use this variable in our SQL query string.
 ```
 %%readsql -h 10 other_df
 SELECT *
-FROM {table_name};
+  FROM {table_name};
 ```
 
 ### Printing SQL Queries
-While writing our SQL queries with string formatting, we may want to view the query beforehand as it there may be errors. We want to this via the `%%printsql` magic function.
+While writing our SQL queries with string formatting, we may want to view the query beforehand as it there may be errors. We want to do this via the `%%printsql` magic function.
 
 ```
 %%printsql
 SELECT *
-  FROM {table_name}
+  FROM {table_name};
 ```
 
 ### Autofill Table Names
