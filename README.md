@@ -6,7 +6,7 @@ The goal of this repository is to serve as a template for any new projects to av
 ### Notebooks
 - Notebook Template.ipynb: This notebook is a template for any new notebook. It should be copied when creating a new notebook so that all of the libraries are already typed in along with any changes to the default matplotlib settings and magic commands to interact with SQL.
 
-### Python FIles
+### Python Files
 - credentials.py: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
 
 - mpp_plotting_functions.py: This file includes all function definitions for the backend plotting functions.
@@ -14,6 +14,7 @@ The goal of this repository is to serve as a template for any new projects to av
 - sql_functions.py: This file defines utility functions for interacting with the cluster (e.g., getting the table or column names).
 
 ## Examples
+We now show some examples of how to use these magic functions.
 ### Executing SQL Queries
 We can execute SQL commands simply by typing regular SQL code and putting an `%%execsql` at the very top of the cell.
 ```
@@ -76,3 +77,8 @@ SELECT *
 When tables are created, the `refresh_tables` function is run. This will place the table name in the namespace as a string. This will give us tab completion for our table names.
 
 <img src='autofill.png' width='400'>
+
+### Threading/Background Processes
+Threading allows us to run two or more cells concurrently. This is useful if we have a long query running, but want to test other stuff inside of the same notebook. We make use of the `%%background` magic function to execute a cell in the background. The magic function will micro-manage these processes by assigning them with IDs and print and output when the code finishes. If IDs are not descriptive enough, there is also an option to put a comment when running the cell so that comment is shown upon completion.
+
+<img src='threading_example.png'>
