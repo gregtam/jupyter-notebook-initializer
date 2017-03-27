@@ -100,3 +100,14 @@ The notebook will automatically create a `ThreadManager` called `thread_manager`
 ```
 thread_manager.get_history()
 ```
+
+This returns a DataFrame showing all completed and uncompleted threads. It also displays their start and end times, the total time for the code to run, and the comment.
+
+We can also filter and show only finished or unfinished threads by running:
+
+```
+thread_manager.get_finished_threads()
+thread_manager.get_unfinished_threads()
+```
+
+Again, these return DataFrames.
