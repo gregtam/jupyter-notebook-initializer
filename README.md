@@ -98,5 +98,5 @@ some_code_here
 The notebook will automatically create a `ThreadManager` called `thread_manager`, which is what the `%%background` magic function accesses. We can view all current and past threads by using the following code:
 
 ```
-thread_manager.get_thread_history()
+thread_manager.get_history()
 ```
