@@ -79,6 +79,24 @@ When tables are created, the `refresh_tables` function is run. This will place t
 <img src='autofill.png' width='400'>
 
 ### Threading/Background Processes
-Threading allows us to run two or more cells concurrently. This is useful if we have a long query running, but want to test other stuff inside of the same notebook. We make use of the `%%background` magic function to execute a cell in the background. The magic function will micro-manage these processes by assigning them with IDs and print and output when the code finishes. If IDs are not descriptive enough, there is also an option to put a comment when running the cell so that comment is shown upon completion.
+Threading allows us to run two or more cells concurrently. This is useful if we have a long query running, but want to test other stuff inside of the same notebook and use the same variables. We make use of the `%%background` magic function to execute a cell in the background. The magic function will micro-manage these processes by assigning them with IDs. If IDs are not descriptive enough in identifying what the code is doing, there is also an option to append a comment to the thread.
 
-<img src='threading_example.png'>
+A simple background thread being called:
+
+```
+%%background
+some_code_here
+```
+
+A background thread with a comment:
+
+```
+%%background comment text goes here
+some_code_here
+```
+
+The notebook will automatically create a `ThreadManager` called `thread_manager`, which is what the `%%background` magic function accesses. We can view all current and past threads by using the following code:
+
+```
+thread_manager.get_thread_history()
+```
