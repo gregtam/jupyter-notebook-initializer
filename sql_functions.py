@@ -1,3 +1,4 @@
+from __future__ import division
 from textwrap import dedent
 
 import pandas as pd
@@ -169,5 +170,4 @@ def get_percent_missing(full_table_name, conn, print_query=False):
         print sql
 
     return pct_df
-
 
