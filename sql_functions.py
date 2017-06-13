@@ -14,11 +14,8 @@ def _separate_schema_table(full_table_name, conn):
         table_name = full_table_name
         return schema_name, full_table_name
 
-
-
 def clear_schema(schema_name, conn, print_query=False):
-    """
-    Remove all tables in a given schema.
+    """Remove all tables in a given schema.
 
     Inputs:
     schema_name - Name of the schema in SQL
@@ -38,13 +35,13 @@ def clear_schema(schema_name, conn, print_query=False):
     table_names = psql.read_sql(sql, conn).table_name
 
     for name in table_names:
-        del_sql = 'DROP TABLE IF EXISTS {schema_name}.{table_name};'.format(schema_name=schema_name, table_name=name)
+        del_sql = 'DROP TABLE IF EXISTS {schema_name}.{table_name};'\
+            .format(schema_name=schema_name, table_name=name)
         psql.execute(del_sql, conn)
 
-
-def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse=False, print_query=False):
-    """
-    Gets all of the column names of a specific table.
+def get_column_names(full_table_name, conn, order_by='ordinal_position',
+                     reverse=False, print_query=False):
+    """Gets all of the column names of a specific table.
 
     Inputs:
     conn - A psycopg2 connection object
@@ -82,7 +79,6 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position', reverse
 
     return psql.read_sql(sql, conn)
 
-
 def get_function_code(function_name, conn, print_query=False):
     """Returns a SQL function's source code"""
     sql = '''
@@ -96,15 +92,13 @@ def get_function_code(function_name, conn, print_query=False):
 
     return psql.read_sql(sql, conn).iloc[0, 0]
 
-
 def get_table_names(conn, schema_name=None, print_query=False):
-    """
-    Gets all the table names in the specified database
+    """ Gets all the table names in the specified database
 
     Inputs:
     conn - A psycopg2 connection object
-    schema_name -  Specify the schema of interest. If left blank,
-                   then it will return all tables in the database.
+    schema_name -  Specify the schema of interest. If left blank, then
+                   it will return all tables in the database.
     print_query - If True, print the resulting query.
     """
 
@@ -124,18 +118,16 @@ def get_table_names(conn, schema_name=None, print_query=False):
 
     return psql.read_sql(sql, conn)
 
-
 def get_percent_missing(full_table_name, conn, print_query=False):
-    """
-    This function takes a schema name and table name as an input
-    and creates a SQL query to determine the number of missing 
-    entries for each column. It will also determine the total
-    number of rows in the table.
+    """This function takes a schema name and table name as an input and
+    creates a SQL query to determine the number of missing entries for
+    each column. It will also determine the total number of rows in the
+    table.
 
     Inputs:
-    full_table_name - Name of the table in SQL. Input can also
-                      include have the schema name prepended, with 
-                      a '.', e.g. 'schema_name.table_name'.
+    full_table_name - Name of the table in SQL. Input can also include
+                      have the schema name prepended, with a '.', e.g.,
+                      'schema_name.table_name'.
     conn - A psycopg2 connection object
     print_query - If True, print the resulting query.
     """
@@ -143,7 +135,8 @@ def get_percent_missing(full_table_name, conn, print_query=False):
     column_names = get_column_names(full_table_name, conn).column_name
     schema_name, table_name = _separate_schema_table(full_table_name, conn)
 
-    num_missing_sql_list = ['SUM(({name} IS NULL)::integer) AS {name}'.format(name=name) for name in column_names]
+    num_missing_sql_list = ['SUM(({name} IS NULL)::integer) AS {name}'\
+                                .format(name=name) for name in column_names]
 
     sql = '''
     SELECT {0},
