@@ -95,10 +95,10 @@ A background thread with a comment:
 some_code_here
 ```
 
-The notebook will automatically create a `ThreadManager` called `thread_manager`, which is what the `%%background` magic function accesses. We can view all current and past threads by using the following code:
+The notebook will automatically create a `ThreadManager` called `thread_manager`, which is what the `%%background` magic function accesses. We can view all current and past threads by calling the `thread_manager`.
 
 ```
-thread_manager.get_history()
+thread_manager()
 ```
 
 This returns a DataFrame showing all completed and uncompleted threads. It also displays their start and end times, the total time for the code to run, and the comment.
