@@ -95,6 +95,15 @@ A background thread with a comment:
 some_code_here
 ```
 
+We can also separate a cell of code into separate sections, which will individually run in parallel in the background. We do this using lines that begin with two or more '#' characters. Any following characters in the line go towards the thread's comment.
+```
+%%background Multi-thread
+## First thread
+some_code_here
+## Second thread
+some_other_code_here
+```
+
 The notebook will automatically create a `ThreadManager` called `thread_manager`, which is what the `%%background` magic function accesses. We can view all current and past threads by calling the `thread_manager`.
 
 ```
