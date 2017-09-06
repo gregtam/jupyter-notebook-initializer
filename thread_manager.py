@@ -1,3 +1,4 @@
+from datetime import datetime
 import threading
 
 from IPython.core.magic import register_cell_magic
@@ -18,7 +19,8 @@ class ThreadManager:
         thread_id = self.get_next_thread_id()
         start_time = datetime.now()
         self.thread_df.loc[thread_id] = [start_time, '', '', cell_text, comment]
-        print 'Started Thread {} at {}.\nComment: {}'.format(thread_id, start_time, comment)
+        print 'Started Thread {} at {}.\nComment: {}'\
+            .format(thread_id, start_time, comment)
         
     def finish_thread(self, thread_id):
         if self.thread_df.loc[thread_id, 'finish_time'] == '':
@@ -32,15 +34,17 @@ class ThreadManager:
             
             # Print comment
             comment = str(self.thread_df.loc[thread_id, 'comment'])
-            print 'Finished Thread {} at {}.\nDone in {}.\nComment: {}'.format(thread_id, finish_time, exec_time, comment)
+            print 'Finished Thread {} at {}.\nDone in {}.\nComment: {}'\
+                .format(thread_id, finish_time, exec_time, comment)
                         
         else:
             raise Exception('Cannot finish an already completed thread.')
         
     def raise_thread_error(self, thread_id, error_message):
         if self.thread_df.loc[thread_id, 'finish_time'] == '':
-            self.thread_df.loc[thread_id, 'finish_time'] = 'Exception: {}'.format(error_message)
-            self.thread_df.loc[thread_id, 'exec_time'] = 'Exception: {}'.format(error_message)
+            exception_str = 'Exception: {}'.format(error_message)
+            self.thread_df.loc[thread_id, 'finish_time'] = exception_str
+            self.thread_df.loc[thread_id, 'exec_time'] = exception_str
         
     def get_next_thread_id(self):
         return self.thread_df.shape[0]
@@ -53,16 +57,14 @@ class ThreadManager:
     
 @register_cell_magic
 def background(line, cell):
-    """
-    Runs whatever is in the cell in a separate thread.
-    This allows the user to run cells in the background
-    so that additional cells can be run concurrently. This
-    will also micromanage by labelling each thread with an
-    id number.
+    """Runs whatever is in the cell in a separate thread.  This allows
+    the user to run cells in the background so that additional cells can
+    be run concurrently. This will also micromanage by labelling each
+    thread with an id number.
     
-    Whatever follows after specifying '%%background' will
-    be used as a comment to label the process if the id
-    number is not descriptive enough.
+    Whatever follows after specifying '%%background' will be used as a
+    comment to label the process if the id number is not descriptive
+    enough.
     """
     def run_cell(cell_value):
         thread_id = thread_manager.get_next_thread_id()
@@ -84,3 +86,5 @@ def background(line, cell):
 
 # We delete this to avoid name conflicts for automagic to work
 del background
+
+thread_manager = ThreadManager()
