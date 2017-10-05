@@ -2,7 +2,7 @@
 # into a cluster such as GPDB or HAWQ. We use this to hide the information
 # from whatever file is logging into the DCA.
 
-login_info_dict = {'database': 'postgres', 
+login_info_dict = {'dbname': 'postgres', 
                    'user': 'postgres',
                    'password': '',
                    'host': 'localhost'
