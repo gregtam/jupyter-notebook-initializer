@@ -4,6 +4,12 @@ from textwrap import dedent
 import pandas as pd
 import pandas.io.sql as psql
 import psycopg2
+from sqlalchemy import create_engine, Column, MetaData, Table
+from sqlalchemy import and_, not_, or_
+from sqlalchemy import alias, between, case, cast, column, false, func,\
+                       intersect, select, text, true
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Integer, Float,\
+                       Numeric, String
 
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name"""
@@ -26,17 +32,17 @@ def clear_schema(schema_name, conn, print_query=False):
     sql = '''
     SELECT table_name
       FROM information_schema.tables
-     WHERE table_schema = '{}'
-    '''.format(schema_name)
+     WHERE table_schema = '{schema_name}'
+    '''.format(**locals())
 
     if print_query:
-        print sql
+        print dedent(sql)
 
     table_names = psql.read_sql(sql, conn).table_name
 
-    for name in table_names:
+    for table_name in table_names:
         del_sql = 'DROP TABLE IF EXISTS {schema_name}.{table_name};'\
-            .format(schema_name=schema_name, table_name=name)
+            .format(**locals())
         psql.execute(del_sql, conn)
 
 def get_column_names(full_table_name, conn, order_by='ordinal_position',
@@ -45,9 +51,9 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position',
 
     Inputs:
     conn - A psycopg2 connection object
-    full_table_name - Name of the table in SQL. Input can also
-                      include have the schema name prepended, with 
-                      a '.', e.g. 'schema_name.table_name'.
+    full_table_name - Name of the table in SQL. Input can also include
+                      have the schema name prepended, with a '.', e.g.
+                      'schema_name.table_name'.
     order_by - Specified way to order columns. Can be one of
                ordinal_position, alphabetically. 
                (Default: ordinal_position)
@@ -67,28 +73,24 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position',
       FROM information_schema.columns
      WHERE table_schema = '{schema_name}'
        AND table_name = '{table_name}'
-     ORDER BY {ordering}{reverse};
-    '''.format(schema_name = schema_name,
-               table_name = table_name,
-               ordering = order_by,
-               reverse = reverse_key
-              )
+     ORDER BY {order_by}{reverse_key};
+    '''.format(**locals())
 
     if print_query:
-        print sql
+        print dedent(sql)
 
     return psql.read_sql(sql, conn)
 
 def get_function_code(function_name, conn, print_query=False):
-    """Returns a SQL function's source code"""
+    """Returns a SQL function's source code."""
     sql = '''
     SELECT pg_get_functiondef(oid)
       FROM pg_proc
      WHERE proname = '{function_name}'
-    '''.format(function_name=function_name)
+    '''.format(**locals())
 
     if print_query:
-        print sql
+        print dedent(sql)
 
     return psql.read_sql(sql, conn).iloc[0, 0]
 
@@ -114,7 +116,7 @@ def get_table_names(conn, schema_name=None, print_query=False):
     '''.format(where_clause)
 
     if print_query:
-        print sql
+        print dedent(sql)
 
     return psql.read_sql(sql, conn)
 
@@ -135,24 +137,26 @@ def get_percent_missing(full_table_name, conn, print_query=False):
     column_names = get_column_names(full_table_name, conn).column_name
     schema_name, table_name = _separate_schema_table(full_table_name, conn)
 
-    num_missing_sql_list = ['SUM(({name} IS NULL)::integer) AS {name}'\
+    num_missing_sql_list = ['SUM(({name} IS NULL)::INTEGER) AS {name}'\
                                 .format(name=name) for name in column_names]
 
+    num_missing_list_str = ',\n           '.join(num_missing_sql_list)
+
     sql = '''
-    SELECT {0},
+    SELECT {num_missing_list_str},
            COUNT(*) AS total_count
       FROM {schema_name}.{table_name};
-    '''.format(',\n           '.join(num_missing_sql_list),
-               schema_name=schema_name,
-               table_name=table_name
-              )
+    '''.format(**locals())
 
     # Read in the data from the query and transpose it
     pct_df = psql.read_sql(sql, conn).T
+
     # Rename the column to 'pct_null'
     pct_df.columns = ['pct_null']
+
     # Get the number of rows of table_name
     total_count = pct_df.ix['total_count', 'pct_null']
+
     # Remove the total_count from the DataFrame
     pct_df = pct_df[:-1]/total_count
     pct_df.reset_index(inplace=True)
@@ -160,7 +164,6 @@ def get_percent_missing(full_table_name, conn, print_query=False):
     pct_df['table_name'] = table_name
 
     if print_query:
-        print sql
+        print dedent(sql)
 
     return pct_df
-
