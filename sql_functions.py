@@ -4,12 +4,6 @@ from textwrap import dedent
 import pandas as pd
 import pandas.io.sql as psql
 import psycopg2
-from sqlalchemy import create_engine, Column, MetaData, Table
-from sqlalchemy import and_, not_, or_
-from sqlalchemy import alias, between, case, cast, column, false, func,\
-                       intersect, select, text, true
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Integer, Float,\
-                       Numeric, String
 
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name"""
@@ -19,6 +13,7 @@ def _separate_schema_table(full_table_name, conn):
         schema_name = psql.read_sql('SELECT current_schema();', conn).iloc[0, 0]
         table_name = full_table_name
         return schema_name, full_table_name
+
 
 def clear_schema(schema_name, conn, print_query=False):
     """Remove all tables in a given schema.
@@ -44,6 +39,7 @@ def clear_schema(schema_name, conn, print_query=False):
         del_sql = 'DROP TABLE IF EXISTS {schema_name}.{table_name};'\
             .format(**locals())
         psql.execute(del_sql, conn)
+
 
 def get_column_names(full_table_name, conn, order_by='ordinal_position',
                      reverse=False, print_query=False):
@@ -81,6 +77,7 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position',
 
     return psql.read_sql(sql, conn)
 
+
 def get_function_code(function_name, conn, print_query=False):
     """Returns a SQL function's source code."""
     sql = '''
@@ -93,6 +90,7 @@ def get_function_code(function_name, conn, print_query=False):
         print dedent(sql)
 
     return psql.read_sql(sql, conn).iloc[0, 0]
+
 
 def get_table_names(conn, schema_name=None, print_query=False):
     """ Gets all the table names in the specified database
@@ -119,6 +117,7 @@ def get_table_names(conn, schema_name=None, print_query=False):
         print dedent(sql)
 
     return psql.read_sql(sql, conn)
+
 
 def get_percent_missing(full_table_name, conn, print_query=False):
     """This function takes a schema name and table name as an input and

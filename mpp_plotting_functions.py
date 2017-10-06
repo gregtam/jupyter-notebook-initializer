@@ -21,12 +21,14 @@ def _add_weights_column(df_list, normed):
     for df in df_list:
         df['weights'] = _create_weight_percentage(df[['freq']], normed)
 
+
 def _create_weight_percentage(hist_col, normed=False):
     """Convert frequencies to percent."""
     if normed:
         return hist_col/hist_col.sum()
     else:
         return hist_col
+
 
 def _listify(df_list, labels):
     """If df_list and labels are DataFrames and strings respectively,
@@ -40,6 +42,7 @@ def _listify(df_list, labels):
         labels = [labels]
     return df_list, labels
 
+
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name."""
     if '.' in full_table_name:
@@ -48,6 +51,8 @@ def _separate_schema_table(full_table_name, conn):
         schema_name = psql.read_sql('SELECT current_schema();', conn).iloc[0, 0]
         table_name = full_table_name
         return schema_name, full_table_name
+
+
 
 def get_histogram_values(table_name, column_name, conn, nbins=25,
                          bin_width=None, cast_as=None, where_clause='',
@@ -74,6 +79,7 @@ def get_histogram_values(table_name, column_name, conn, nbins=25,
         """Check to see if any inputs conflict and raise an error if
         there are issues.
         """
+
         if nbins is not None and nbins < 0:
             raise Exception('nbins must be positive.')
         if bin_width is not None and bin_width < 0:
@@ -81,7 +87,6 @@ def get_histogram_values(table_name, column_name, conn, nbins=25,
     
     def _get_column_information(full_table_name, column_name, conn):
         """Get column name and data type information."""
-        
         schema_name, table_name =  _separate_schema_table(full_table_name,
                                                           conn
                                                          )
@@ -123,10 +128,10 @@ def get_histogram_values(table_name, column_name, conn, nbins=25,
             raise Exception(column_name + ' is not found in the table ' + table_name)
 
     def _get_cast_string(cast_as):
+        """If cast_as is specified, we must create a cast string to
+        recast our columns. If not, we set it as a blank string.
         """
-        If cast_as is specified, we must create a cast string
-        to recast our columns. If not, we set it as a blank string.
-        """
+
         if cast_as is None:
             return ''
         else:
@@ -323,13 +328,12 @@ def get_roc_values(table_name, y_true, y_score, conn, print_query=False):
 def get_scatterplot_values(table_name, column_name_x, column_name_y, conn,
                            nbins=(1000, 1000), bin_size=None, cast_x_as=None,
                            cast_y_as=None, print_query=False):
-    """
-    Takes a SQL table and creates scatter plot bin values. This is the
-    2D version of get_histogram_values. Relevant parameters are either
-    the number of bins or the size of each bin in both the x and y
-    direction. Only number of bins or size of the bins is specified. The
-    other pair must be left at its default value of 0 or it will throw
-    an error.
+    """ Takes a SQL table and creates scatter plot bin values. This is
+    the 2D version of get_histogram_values. Relevant parameters are
+    either the number of bins or the size of each bin in both the x and
+    y direction. Only number of bins or size of the bins is specified.
+    The other pair must be left at its default value of 0 or it will
+    throw an error.
     
     Inputs:
     table_name - Name of the table in SQL. Input can also include have
@@ -351,6 +355,7 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn,
         """Check to see if any inputs conflict and raise an error if
         there are issues.
         """
+
         if bin_size is not None:
             if bin_size[0] < 0 or bin_size[1] < 0:
                 raise Exception('Bin dimensions must both be positive.')
@@ -359,11 +364,11 @@ def get_scatterplot_values(table_name, column_name_x, column_name_y, conn,
                 raise Exception('Number of bin dimensions must both be positive')
     
     def _get_cast_string(cast_as_x, cast_as_y):
-        """
-        If cast_as_x and/or cast_as_y are specified, we must create a
+        """If cast_as_x and/or cast_as_y are specified, we must create a
         cast string to recast our columns. If not, we set it as a blank
         string.
         """
+
         if cast_x_as is None:
             cast_x_string = ''
         else:
@@ -535,6 +540,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False,
 
         Returns the joined DataFrame
         """
+
         for i in range(len(df_list)):
             temp_df = df_list[i].copy()
             temp_df.columns = ['category', 'freq_{}'.format(i)]
@@ -556,6 +562,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False,
         """Get the number of categories depending on whether we are 
         specifying to drop it in the function.
         """
+
         if null_at == '':
             return hist_df['category'].dropna().shape[0]
         else:
@@ -590,6 +597,7 @@ def plot_categorical_hists(df_list, labels=[], log=False, normed=False,
 
             Returns indices within a bin for each histogram.
             """
+
             if len(df_list) == 1:
                 return [0, 1]
             else:
@@ -779,22 +787,22 @@ def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False,
         return [df['bin_nbr'].isnull().any() for df in df_list]
 
     def _get_null_weights(has_null, df_list):
+        """ If there are nulls, determine the weights.  Otherwise, set 
+        weights to 0.
+        
+        Returns the list of null weights.
         """
-        If there are nulls, determine the weights.
-        Otherwise, set weights to 0. Return the list 
-        of null weights.
-        """
+
         return [float(df[df['bin_nbr'].isnull()].weights)
                 if is_null else 0 
                 for is_null, df in zip(has_null, df_list)]
 
     def _get_data_type(bin_nbrs):
+        """ Returns the data type in the histogram, i.e., whether it is
+        numeric or a timetamp. This is important because it determines
+        how we deal with the bins.
         """
-        Returns the data type in the histogram, i.e.,
-        whether it is numeric or a timetamp. This is
-        important because it determines how we deal with
-        the bins.
-        """
+
         if 'float' in str(type(bin_nbrs[0][0])) or 'int' in str(type(bin_nbrs[0][0])):
             return 'numeric'
         elif str(type(bin_nbrs[0][0])) == "<class 'pandas.tslib.Timestamp'>":
@@ -810,6 +818,7 @@ def plot_numeric_hists(df_list, labels=[], nbins=25, log=False, normed=False,
         experiment with plotting different bin amounts using the
         histogram values.
         """
+
         # If the bin type is numeric
         if data_type == 'numeric':
             if len(labels) > 0:
