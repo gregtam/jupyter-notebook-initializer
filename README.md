@@ -4,12 +4,12 @@ The goal of this repository is to serve as a template for any new projects to av
 
 ## Files
 ### Notebooks
-- Notebook Template.ipynb: This notebook is a template for any new notebook. It should be copied when creating a new notebook so that all of the libraries are already typed in along with any changes to the default matplotlib settings and magic commands to interact with SQL. Alternatively, we can simply 'source' this notebook from another Jupyter notebook by running `%run 'Notebook Template.ipynb'`. This helps us keep the main notebook cleaner by having fewer cells.
+- `notebook_template.ipynb`: This notebook is a template for any new notebook. It should be copied when creating a new notebook so that all of the libraries are already typed in along with any changes to the default matplotlib settings and magic commands to interact with SQL. Alternatively, we can simply 'source' this notebook from another Jupyter notebook by running `%run notebook_template.ipynb`. This helps us keep the main notebook cleaner by having fewer cells.
 
 ### Python Files
 - `credentials.py`: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
 
-- `mpp_plotting_functions.py`: This file includes all function definitions for the backend plotting functions.
+- `mpp_plotting_functions.py`: This file includes all function definitions for the backend plotting functions. Instructions on how to use this can be found at [github.com/gregtam/mpp-plotting](https://github.com/gregtam/mpp-plotting)
 
 - `sql_functions.py`: This file defines utility functions for interacting with the cluster (e.g., getting the table or column names).
 
