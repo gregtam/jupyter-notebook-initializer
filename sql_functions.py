@@ -171,10 +171,13 @@ def get_percent_missing(full_table_name, conn, print_query=False):
 def get_process_ids(conn, usename=None, print_query=False):
     """Gets the process IDs of current running activity.
 
+    Inputs:
     conn - A psycopg2 connection object
     usename - Username to filter by. If None, then do not filter.
               (Default: None)
     print_query - If True, print the resulting query.
+
+    Returns a Pandas DataFrame
     """
 
     if usename is None:
@@ -197,6 +200,7 @@ def get_process_ids(conn, usename=None, print_query=False):
 def kill_process(conn, pid, print_query=False):
     """Kills a specified process.
 
+    Inputs:
     conn - A psycopg2 connection object
     pid - The process ID that we want to kill
     print_query - If True, print the resulting query.
