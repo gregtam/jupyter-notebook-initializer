@@ -93,7 +93,7 @@ def get_function_code(function_name, conn, print_query=False):
 
 
 def get_table_names(conn, schema_name=None, print_query=False):
-    """ Gets all the table names in the specified database
+    """Gets all the table names in the specified database.
 
     Inputs:
     conn - A psycopg2 connection object
@@ -166,3 +166,44 @@ def get_percent_missing(full_table_name, conn, print_query=False):
         print dedent(sql)
 
     return pct_df
+
+
+def get_process_ids(conn, usename=None, print_query=False):
+    """Gets the process IDs of current running activity.
+
+    conn - A psycopg2 connection object
+    usename - Username to filter by. If None, then do not filter.
+              (Default: None)
+    print_query - If True, print the resulting query.
+    """
+
+    if usename is None:
+        where_clause = ''
+    else:
+        where_clause = "WHERE usename = '{}'".format(usename)
+
+    sql = '''
+    SELECT datname, procpid, usename, current_query, query_start
+      FROM pg_stat_activity
+     {}
+    '''.format(where_clause)
+
+    if print_query:
+        print dedent(sql)
+
+    return psql.read_sql(sql, conn)
+
+
+def kill_process(conn, pid, print_query=False):
+    """Kills a specified process.
+
+    conn - A psycopg2 connection object
+    pid - The process ID that we want to kill
+    print_query - If True, print the resulting query.
+    """
+
+    sql = '''
+    SELECT pg_cancel_backend({});
+    '''.format(pid)
+
+    psql.execute(sql, conn)
