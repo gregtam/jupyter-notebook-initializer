@@ -211,3 +211,65 @@ def kill_process(conn, pid, print_query=False):
     '''.format(pid)
 
     psql.execute(sql, conn)
+
+
+def save_table(selected_table, table_name, engine, distribution_key=None,
+               randomly=False, print_query=False):
+    """Saves a SQLAlchemy selectable object to database.
+    
+    Inputs:
+    selected_table - A SQLAlchemy selectable object we wish to save
+    table_name - A string indicating what we want to name the table
+    engine - SQLAlchemy engine
+    distribution_key - The specified distribution key, if applicable
+                       (Default: None)
+    randomly - A boolean of whether to distribute randomly
+               (Default: False)
+    print_query - If True, print the resulting query.
+    """
+    
+    def _get_distribution_str(distribution_key, randomly):
+        # Set distribution key string
+        if distribution_key is None and not randomly:
+            return ''
+        elif distribution_key is None and randomly:
+            return 'DISTRIBUTED RANDOMLY'
+        elif distribution_key is not None and not randomly:
+            if isinstance(distribution_key, Column):
+                return 'DISTRIBUTED BY ({})'.format(distribution_key.name)
+            elif isinstance(distribution_key, str):
+                return 'DISTRIBUTED BY ({})'.format(distribution_key)
+            else:
+                raise ValueError('distribution_key must be a string or a Column.')
+        else:
+            raise ValueError('distribution_key and randomly cannot both be specified.')
+            
+    def _create_empty_table(create_str, columns_str, distribution_str,
+                            engine, print_query):
+        create_table_str = '{create_str}{columns_str}) {distribution_str};'\
+            .format(**locals())
+        if print_query:
+            print create_table_str
+        # Create the table with no rows
+        psql.execute(create_table_str, engine)
+    
+    # Set create table string
+    create_str = 'CREATE TABLE {} ('.format(table_name)
+    # Specify column names and data types
+    columns_str = ',\n'.join(['{} {}'.format(s.name, s.type) 
+                                  for s in selected_table.c])
+    # Set distribution key
+    distribution_str = _get_distribution_str(distribution_key, randomly)
+        
+    # Create an empty table with the desired columns
+    _create_empty_table(create_str, columns_str, distribution_str, engine,
+                        print_query)
+    
+    created_table = Table(table_name, metadata, autoload=True)
+    # Insert rows from selected table into the new table
+    insert_sql = created_table\
+        .insert()\
+        .from_select(selected_table.c,
+                     select=selected_table
+                    )
+    psql.execute(insert_sql, engine)
