@@ -227,7 +227,7 @@ def save_table(selected_table, table_name, engine, distribution_key=None,
                (Default: False)
     print_query - If True, print the resulting query.
     """
-    
+
     def _get_distribution_str(distribution_key, randomly):
         # Set distribution key string
         if distribution_key is None and not randomly:
@@ -243,7 +243,7 @@ def save_table(selected_table, table_name, engine, distribution_key=None,
                 raise ValueError('distribution_key must be a string or a Column.')
         else:
             raise ValueError('distribution_key and randomly cannot both be specified.')
-            
+        
     def _create_empty_table(create_str, columns_str, distribution_str,
                             engine, print_query):
         create_table_str = '{create_str}{columns_str}) {distribution_str};'\
@@ -252,19 +252,19 @@ def save_table(selected_table, table_name, engine, distribution_key=None,
             print create_table_str
         # Create the table with no rows
         psql.execute(create_table_str, engine)
-    
+ 
     # Set create table string
     create_str = 'CREATE TABLE {} ('.format(table_name)
     # Specify column names and data types
-    columns_str = ',\n'.join(['{} {}'.format(s.name, s.type) 
+    columns_str = ',\n'.join(['{} {}'.format(s.name, s.type)
                                   for s in selected_table.c])
     # Set distribution key
     distribution_str = _get_distribution_str(distribution_key, randomly)
-        
+ 
     # Create an empty table with the desired columns
     _create_empty_table(create_str, columns_str, distribution_str, engine,
                         print_query)
-    
+ 
     created_table = Table(table_name, metadata, autoload=True)
     # Insert rows from selected table into the new table
     insert_sql = created_table\
