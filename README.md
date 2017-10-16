@@ -11,7 +11,7 @@ The goal of this repository is to serve as a template for any new projects to av
 
 - `ml_utils.py`: Utility functions for common machine learning tasks. E.g., plotting ROC curves and features.
 
-- `mpp_plotting.py`: This file includes all function definitions for the backend plotting functions. Instructions on how to use this can be found at [github.com/gregtam/mpp-plotting](https://github.com/gregtam/mpp-plotting)
+- `mpp_plotting.py`: This file includes all function definitions for the backend plotting functions. Instructions on how to use this can be found at [github.com/gregtam/mpp-plotting](https://github.com/gregtam/mpp-plotting).
 
 - `sql_functions.py`: This file defines utility functions for interacting with the cluster (e.g., getting the table or column names).
 
