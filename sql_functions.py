@@ -4,6 +4,7 @@ from textwrap import dedent
 import pandas as pd
 import pandas.io.sql as psql
 import psycopg2
+from sqlalchemy import Column, Table
 
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name"""
@@ -21,7 +22,7 @@ def clear_schema(schema_name, conn, print_query=False):
     Inputs:
     schema_name - Name of the schema in SQL
     conn - A psycopg2 connection object
-    print_query - If True, print the resulting query.
+    print_query - If True, print the resulting query. (Default: False)
     """
 
     sql = '''
@@ -54,7 +55,7 @@ def get_column_names(full_table_name, conn, order_by='ordinal_position',
                ordinal_position, alphabetically. 
                (Default: ordinal_position)
     reverse - If True, then reverse the ordering (Default: False).
-    print_query - If True, print the resulting query.
+    print_query - If True, print the resulting query. (Default: False)
     """
 
     schema_name, table_name = _separate_schema_table(full_table_name, conn)
@@ -99,7 +100,7 @@ def get_table_names(conn, schema_name=None, print_query=False):
     conn - A psycopg2 connection object
     schema_name -  Specify the schema of interest. If left blank, then
                    it will return all tables in the database.
-    print_query - If True, print the resulting query.
+    print_query - If True, print the resulting query. (Default: False)
     """
 
     if schema_name is None:
@@ -130,7 +131,7 @@ def get_percent_missing(full_table_name, conn, print_query=False):
                       have the schema name prepended, with a '.', e.g.,
                       'schema_name.table_name'.
     conn - A psycopg2 connection object
-    print_query - If True, print the resulting query.
+    print_query - If True, print the resulting query. (Default: False)
     """
 
     column_names = get_column_names(full_table_name, conn).column_name
@@ -175,7 +176,7 @@ def get_process_ids(conn, usename=None, print_query=False):
     conn - A psycopg2 connection object
     usename - Username to filter by. If None, then do not filter.
               (Default: None)
-    print_query - If True, print the resulting query.
+    print_query - If True, print the resulting query. (Default: False)
 
     Returns a Pandas DataFrame
     """
@@ -203,7 +204,7 @@ def kill_process(conn, pid, print_query=False):
     Inputs:
     conn - A psycopg2 connection object
     pid - The process ID that we want to kill
-    print_query - If True, print the resulting query.
+    print_query - If True, print the resulting query. (Default: False)
     """
 
     sql = '''
@@ -213,20 +214,32 @@ def kill_process(conn, pid, print_query=False):
     psql.execute(sql, conn)
 
 
-def save_table(selected_table, table_name, engine, distribution_key=None,
-               randomly=False, print_query=False):
+def save_table(selected_table, table_name, metadata, engine,
+               distribution_key=None, randomly=False, drop_table=False,
+               print_query=False):
     """Saves a SQLAlchemy selectable object to database.
     
     Inputs:
     selected_table - A SQLAlchemy selectable object we wish to save
     table_name - A string indicating what we want to name the table
-    engine - SQLAlchemy engine
+    metadata - SQLAlchemy MetaData object
+    engine - SQLAlchemy engine object
     distribution_key - The specified distribution key, if applicable
                        (Default: None)
-    randomly - A boolean of whether to distribute randomly
-               (Default: False)
-    print_query - If True, print the resulting query.
+    randomly - If True, distribute table randomly (Default: False)
+    drop_table - If True, drop the table if it exists before creating
+                 new table (Default: False)
+    print_query - If True, print the resulting query. (Default: False)
     """
+
+    def _create_empty_table(create_str, columns_str, distribution_str,
+                            engine, print_query):
+        create_table_str = '{create_str}{columns_str}) {distribution_str};'\
+            .format(**locals())
+        if print_query:
+            print create_table_str
+        # Create the table with no rows
+        psql.execute(create_table_str, engine)
 
     def _get_distribution_str(distribution_key, randomly):
         # Set distribution key string
@@ -244,15 +257,9 @@ def save_table(selected_table, table_name, engine, distribution_key=None,
         else:
             raise ValueError('distribution_key and randomly cannot both be specified.')
         
-    def _create_empty_table(create_str, columns_str, distribution_str,
-                            engine, print_query):
-        create_table_str = '{create_str}{columns_str}) {distribution_str};'\
-            .format(**locals())
-        if print_query:
-            print create_table_str
-        # Create the table with no rows
-        psql.execute(create_table_str, engine)
- 
+    if drop_table:
+        psql.execute('DROP TABLE IF EXISTS {};'.format(table_name), engine)
+
     # Set create table string
     create_str = 'CREATE TABLE {} ('.format(table_name)
     # Specify column names and data types
