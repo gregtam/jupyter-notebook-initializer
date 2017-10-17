@@ -6,6 +6,7 @@ import pandas.io.sql as psql
 import psycopg2
 from sqlalchemy import Column, Table
 
+
 def _separate_schema_table(full_table_name, conn):
     """Separates schema name and table name"""
     if '.' in full_table_name:

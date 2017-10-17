@@ -13,6 +13,7 @@ import seaborn as sns
 
 import credentials
 
+
 def _add_weights_column(df_list, normed):
     """Add the weights column for each DataFrame in a list of
     DataFrames.
