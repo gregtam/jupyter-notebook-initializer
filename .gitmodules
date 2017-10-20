@@ -1,0 +1,3 @@
+[submodule "mpp-plotting"]
+	path = mpp-plotting
+	url = https://github.com/gregtam/mpp-plotting
