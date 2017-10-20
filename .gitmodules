@@ -1,3 +1,6 @@
 [submodule "mpp-plotting"]
 	path = mpp-plotting
 	url = https://github.com/gregtam/mpp-plotting
+[submodule "plotting-utils"]
+	path = plotting-utils
+	url = https://github.com/gregtam/plotting-utils
