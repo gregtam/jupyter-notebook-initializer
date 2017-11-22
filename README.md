@@ -10,7 +10,7 @@ The goal of this repository is to serve as a template for any new projects to av
 - `credentials.py`: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
 
 ### Submodules
-- `python-utils`: A repository containing utility functions for common machine learning tasks such as plotting, manipulating data, and accessing a SQL database
+- `python-utils`: A repository containing utility functions for common machine learning tasks such as plotting, manipulating data, and accessing a SQL database.
 
 - `mpp-plotting`: A repository containing functions for plotting using an MPP database. For more info, check out my [blog post](http://engineering.pivotal.io/post/mpp-plotting/).
 
