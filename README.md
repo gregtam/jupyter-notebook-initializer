@@ -1,6 +1,6 @@
 # jupyter-notebook-template
 
-The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The file Notebook Template.ipynb serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
+The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The file notebook_template.ipynb serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
 
 ## Files
 ### Notebooks
@@ -9,11 +9,10 @@ The goal of this repository is to serve as a template for any new projects to av
 ### Python Files
 - `credentials.py`: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
 
-- `plotting_utils.py`: Utility functions for common machine learning tasks. E.g., plotting ROC curves and features.
+### Submodules
+- `python-utils`: A repository containing utility functions for common machine learning tasks such as plotting, manipulating data, and accessing a SQL database
 
-- `mpp_plotting.py`: This file includes all function definitions for the backend plotting functions. Instructions on how to use this can be found at [github.com/gregtam/mpp-plotting](https://github.com/gregtam/mpp-plotting).
-
-- `sql_functions.py`: This file defines utility functions for interacting with the cluster (e.g., getting the table or column names).
+- `mpp-plotting`: A repository containing functions for plotting using an MPP database. For more info, check out my [blog post](http://engineering.pivotal.io/post/mpp-plotting/).
 
 ## Examples
 We now show some examples of how to use these magic functions.
