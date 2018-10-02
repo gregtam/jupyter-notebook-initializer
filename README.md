@@ -1,10 +1,10 @@
 # jupyter-notebook-template
 
-The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The file notebook_template.ipynb serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
+The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The file notebook_initializer.ipynb serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
 
 ## Files
 ### Notebooks
-- `notebook_template.ipynb`: This notebook is a template for any new notebook. It should be copied when creating a new notebook so that all of the libraries are already typed in along with any changes to the default matplotlib settings and magic commands to interact with SQL. Alternatively, we can simply 'source' this notebook from another Jupyter notebook by running `%run notebook_template.ipynb`. This helps us keep the main notebook cleaner by having fewer cells.
+- `notebook_initializer.ipynb`: This notebook is a template for any new notebook. It should be copied when creating a new notebook so that all of the libraries are already typed in along with any changes to the default matplotlib settings and magic commands to interact with SQL. Alternatively, we can simply 'source' this notebook from another Jupyter notebook by running `%run notebook_initializer.ipynb`. This helps us keep the main notebook cleaner by having fewer cells.
 
 ### Python Files
 - `credentials.py`: This file includes login information into an MPP database. It is important to keep these separate from the notebook so that login information is not present inside of the notebook.
