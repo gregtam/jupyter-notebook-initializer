@@ -1,4 +1,4 @@
-# jupyter-notebook-template
+# jupyter-notebook-initializer
 
 The goal of this repository is to serve as a template for any new projects to avoid the hassle of configuring all the options each time a new project is started. The file notebook_initializer.ipynb serves as a starting point for any Jupyter notebook by importing useful libraries and setting up default settings (e.g., plotting settings, SQL magic functions).
 
